@@ -24,3 +24,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Form fields: always dark text so typed content is visible on light inputs */
+input,
+select,
+textarea {
+  color: #171717;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #737373;
+}
+
+/* Dark UI pages (e.g. milestones): white text and dark dropdown options */
+.milestones-page input,
+.milestones-page select,
+.milestones-page textarea {
+  color: #fff;
+}
+.milestones-page input::placeholder,
+.milestones-page textarea::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+.milestones-page select option {
+  background: #171717;
+  color: #fff;
+}
