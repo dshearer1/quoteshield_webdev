@@ -36,8 +36,9 @@ export async function POST(req: Request) {
   }
   const authEmail = (authUser.user.email ?? "").trim().toLowerCase();
 
+  type SubmissionRow = { id: string; email: string; status: string; stripe_session_id: string | null; paid_at: string | null; stripe_payment_intent: string | null };
   let submissionId: string | null = null;
-  let submission: { id: string; email: string; status: string; stripe_session_id: string | null; paid_at: string | null; stripe_payment_intent: string | null } | null = null;
+  let submission: SubmissionRow | null = null;
   let stripeSessionIdUsed: string | null = null;
 
   if (claimToken) {
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
     submissionId = row.id;
-    submission = row as typeof submission;
+    submission = row as SubmissionRow;
   } else {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: [] });
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
     submissionId = row.id;
-    submission = row as typeof submission;
+    submission = row as SubmissionRow;
   }
 
   const submissionEmail = (submission.email ?? "").trim().toLowerCase();
