@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
@@ -25,7 +26,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const sb = supabaseAdmin;
+  const sb: SupabaseClient = supabaseAdmin;
   const { data: existing, error: fetchErr } = await sb
     .from("project_milestones")
     .select("id, user_id")
@@ -75,7 +76,7 @@ export async function DELETE(
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  const sb = supabaseAdmin;
+  const sb: SupabaseClient = supabaseAdmin;
   const { data: existing, error: fetchErr } = await sb
     .from("project_milestones")
     .select("id, user_id")
