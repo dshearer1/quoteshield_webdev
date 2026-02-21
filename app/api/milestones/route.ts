@@ -1,10 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-async function ensureProjectAccess(sb: ReturnType<typeof supabaseAdmin>, userId: string, projectId: string) {
+async function ensureProjectAccess(sb: SupabaseClient, userId: string, projectId: string) {
   const { data } = await sb
     .from("submissions")
     .select("id")
