@@ -174,7 +174,7 @@ export async function POST(req: Request) {
     const propertyType = ptMatch ? ptMatch[1].trim() : null;
     const projectSize = psMatch ? psMatch[1].trim() : null;
     const specialConditions = scMatch
-      ? scMatch[1].split(",").map((s) => s.trim()).filter(Boolean)
+      ? scMatch[1].split(",").map((s: string) => s.trim()).filter(Boolean)
       : null;
 
     const analyzePromise = analyzeQuote(
