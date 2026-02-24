@@ -109,7 +109,8 @@ export async function POST(req: Request) {
       .select("id, status, file_path, project_type, project_notes, address, project_value, contractor_name, ai_result, quote_type")
       .eq("id", submissionId)
       .single();
-    tracer.trace("fetch_submission", { elapsed: elapsed(Date.now() - t0Fetch), error: subErr?.message ?? null });
+    const subErrMsg = errorMessage(subErr);
+    tracer.trace("fetch_submission", { elapsed: elapsed(Date.now() - t0Fetch), error: subErrMsg });
 
     if (subErr || !sub) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
@@ -186,9 +187,10 @@ export async function POST(req: Request) {
     const t0Download = Date.now();
     tracer.trace("download_pdf_start", { filePath, bucket: STORAGE_BUCKET });
     const { data, error: dlErr } = await sb.storage.from(STORAGE_BUCKET).download(filePath);
-    tracer.trace("download_pdf", { elapsed: elapsed(Date.now() - t0Download), error: dlErr?.message ?? null, hasData: !!data });
+    const dlErrMsg = errorMessage(dlErr);
+    tracer.trace("download_pdf", { elapsed: elapsed(Date.now() - t0Download), error: dlErrMsg, hasData: !!data });
     if (dlErr || !data) {
-      console.error("[api/process] PDF download failed:", dlErr?.message ?? "no data", "path:", filePath, "bucket:", STORAGE_BUCKET);
+      console.error("[api/process] PDF download failed:", dlErrMsg ?? "no data", "path:", filePath, "bucket:", STORAGE_BUCKET);
       await sb
         .from("submissions")
         .update({ status: "error", analysis_status: "error", ai_error: "Failed to download PDF. The file may be missing or inaccessible.", processed_at: new Date().toISOString() })
