@@ -207,7 +207,7 @@ export async function POST(req: Request) {
       const arrayBuffer = await data.arrayBuffer();
       pdfBuffer = Buffer.from(arrayBuffer);
     } catch (parseErr: unknown) {
-      const parseMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      const parseMsg = errorMessage(parseErr) ?? String(parseErr);
       console.error("[api/process] PDF buffer/parse failed:", parseMsg, parseErr);
       await sb
         .from("submissions")
@@ -277,7 +277,7 @@ export async function POST(req: Request) {
     } catch (openaiErr: unknown) {
       console.error("[api/process] openai error after", elapsed(Date.now() - t0Ai), openaiErr);
       const isTimeout = openaiErr instanceof Error && (openaiErr as { statusCode?: number }).statusCode === 504;
-      const errMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
+      const errMsg = errorMessage(openaiErr) ?? String(openaiErr);
       await sb
         .from("submissions")
         .update({ status: "error", analysis_status: "error", ai_error: errMsg, processed_at: new Date().toISOString() })
@@ -341,7 +341,7 @@ export async function POST(req: Request) {
     tracer.trace("done", { total: elapsed(Date.now() - startTime) });
     return NextResponse.json({ ok: true, confidence: ai_confidence });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err) ?? String(err);
     const stack = err instanceof Error ? err.stack : undefined;
     const step = tracer.step;
     console.error("[/api/process] failed", { submissionId, step, err, stack });
