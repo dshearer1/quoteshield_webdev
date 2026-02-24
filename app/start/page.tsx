@@ -449,6 +449,7 @@ export default function StartPage() {
         }),
       });
 
+      if (!effectiveSubmissionId) throw new Error("Missing submissionId");
       if (file) {
         const formData = new FormData();
         formData.append("submissionId", effectiveSubmissionId);
