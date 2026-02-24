@@ -16,6 +16,13 @@ function elapsed(ms: number): string {
   return `${Math.round(ms)}ms`;
 }
 
+/** Safe message from unknown error (no property access on unknown). */
+function errorMessage(e: unknown): string | null {
+  if (e == null) return null;
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
 /** Step-by-step tracer: logs step name, elapsed time since start, and optional extra. Returns current step for error reporting. */
 function createTracer(startTime: number) {
   let lastStep = "init";
@@ -318,7 +325,7 @@ export async function POST(req: Request) {
       isRevisedFree,
       address: sub.address ?? null,
     });
-    const saveErrMsg = saveErr != null ? (saveErr instanceof Error ? saveErr.message : String(saveErr)) : null;
+    const saveErrMsg = errorMessage(saveErr);
     tracer.trace("save_full_analysis", { elapsed: elapsed(Date.now() - t0Save), error: saveErrMsg });
 
     if (saveErr) {
