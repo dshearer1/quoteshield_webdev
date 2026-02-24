@@ -327,7 +327,7 @@ export default function ReportPreviewPaywall({
   const effectiveUnitPrice = analysis?.effective_unit_price != null && Number.isFinite(analysis.effective_unit_price) ? Number(analysis.effective_unit_price) : null;
   const pricingConfidence = analysis?.pricing_confidence != null && Number.isFinite(analysis.pricing_confidence) ? Number(analysis.pricing_confidence) : null;
   const pricingPositionRaw = analysis?.pricing_position ?? null;
-  const benchmark = getBenchmarkFromAnalysis(analysis);
+  const benchmark = getBenchmarkFromAnalysis(analysis ?? null);
   const reportFallback = getMarketAnalysisFromReport(report);
   const reportPosition = getPricingPositionFromReport(report);
 
