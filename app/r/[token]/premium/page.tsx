@@ -115,6 +115,15 @@ export default function PremiumReportPage() {
 
   if (!payload) return null;
 
+  const lineItems: Parameters<typeof ReportView>[0]["lineItems"] = (payload.lineItems ?? []).map((li) => ({
+    ...li,
+    category: li.category ?? null,
+    description_raw: li.description_raw ?? null,
+    quantity: li.quantity ?? null,
+    unit_price: li.unit_price ?? null,
+    line_total: li.line_total ?? null,
+  }));
+
   return (
     <div className="min-h-[calc(100vh-8rem)] bg-neutral-950 text-white">
       <div className="mx-auto max-w-[1100px] px-6 py-8 sm:py-10">
@@ -124,7 +133,7 @@ export default function PremiumReportPage() {
           aiConfidence={payload.aiConfidence}
           submissionId={payload.submissionId}
           initialChatMessages={payload.initialChatMessages}
-          lineItems={payload.lineItems}
+          lineItems={lineItems}
           analysis={payload.analysis as Parameters<typeof ReportView>[0]["analysis"]}
         />
       </div>
