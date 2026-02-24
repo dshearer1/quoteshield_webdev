@@ -144,10 +144,14 @@ function ProjectSnapshot({ data }: { data: ReportData }) {
       : "weak";
   const scopeCompleteness = scopeCompletenessRaw === "weak" ? "Limited detail" : String(scopeCompletenessRaw);
 
+  const contractorStr = contractor != null ? String(contractor).trim() : "";
+  const projectTypeStr = projectType != null ? String(projectType).trim() : "";
+  const confidenceStr = confidence != null ? String(confidence).trim() : "";
+
   const hasAny =
     total != null ||
-    contractor ||
-    projectType ||
+    contractorStr ||
+    projectTypeStr ||
     riskLevel ||
     qualityScore != null ||
     paymentRisk ||
@@ -188,11 +192,11 @@ function ProjectSnapshot({ data }: { data: ReportData }) {
                 {String(currency)} {Number(total).toLocaleString()}
               </SnapshotChip>
             )}
-            {contractor && (
-              <SnapshotChip label="Contractor">{String(contractor)}</SnapshotChip>
+            {contractorStr && (
+              <SnapshotChip label="Contractor">{contractorStr}</SnapshotChip>
             )}
-            {projectType && (
-              <SnapshotChip label="Project type">{String(projectType)}</SnapshotChip>
+            {projectTypeStr && (
+              <SnapshotChip label="Project type">{projectTypeStr}</SnapshotChip>
             )}
             <span title={riskTooltip}>
               <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
@@ -226,9 +230,9 @@ function ProjectSnapshot({ data }: { data: ReportData }) {
             <SnapshotChip label="Scope completeness" tooltip={scopeTooltip}>
               {scopeCompleteness}
             </SnapshotChip>
-            {confidence && (
+            {confidenceStr && (
               <SnapshotChip label="Confidence score">
-                {String(confidence)}
+                {confidenceStr}
               </SnapshotChip>
             )}
           </div>
