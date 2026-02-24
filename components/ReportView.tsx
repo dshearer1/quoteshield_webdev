@@ -128,19 +128,17 @@ function ProjectSnapshot({ data }: { data: ReportData }) {
   const paymentRisk = payment?.payment_risk ?? "medium";
   const timelineClarityRaw = timeline?.timeline_clarity ?? "missing";
   const timelineClarity = formatSnapshotLabel(String(timelineClarityRaw));
-  const warrantyCoverageRaw = (scope?.present as string[] | undefined)?.some((s) =>
-    /warranty|warrant/i.test(s)
-  )
+  const present: string[] = Array.isArray(scope?.present) ? (scope.present as string[]) : [];
+  const missing: unknown[] = Array.isArray(scope?.missing_or_unclear) ? (scope.missing_or_unclear as unknown[]) : [];
+  const warrantyCoverageRaw = present.some((s) => /warranty|warrant/i.test(s))
     ? "clear"
-    : scope?.missing_or_unclear
+    : missing.length
       ? "basic"
       : "missing";
   const warrantyCoverage = formatSnapshotLabel(String(warrantyCoverageRaw));
   const scopeCompletenessRaw =
-    scope?.present?.length && scope?.missing_or_unclear?.length
-      ? (scope.present as string[]).length /
-          ((scope.present as string[]).length + (scope.missing_or_unclear as unknown[]).length) >
-        0.6
+    present.length && missing.length
+      ? present.length / (present.length + missing.length) > 0.6
         ? "strong"
         : "medium"
       : "weak";
