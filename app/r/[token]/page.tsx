@@ -12,7 +12,7 @@ export default async function ReportPage({ params }: PageProps) {
 
   const { data: sub, error } = await sb
     .from("submissions")
-    .select("id, email, project_type, ai_result, ai_confidence, status, processed_at")
+    .select("id, email, project_type, ai_result, ai_confidence, status, processed_at, paid_at")
     .eq("token", token)
     .single();
 
@@ -32,10 +32,22 @@ export default async function ReportPage({ params }: PageProps) {
     (sub.status === "pending_payment" || sub.status === "draft") &&
     sub.ai_result != null
   ) {
+    const { data: freeAnalysis } = await sb
+      .from("submission_analysis")
+      .select("pricing_position, job_units, job_unit_name, effective_unit_price, pricing_confidence, benchmark_snapshot, pricing_engine_result")
+      .eq("submission_id", sub.id)
+      .maybeSingle();
+    const { data: freeLineItems } = await sb
+      .from("submission_line_items")
+      .select("id, description_raw, description_normalized, quantity, line_total, unit, category, sort_order")
+      .eq("submission_id", sub.id)
+      .order("sort_order", { ascending: true });
     return (
       <ReportPreviewPaywall
         submissionId={sub.id}
         report={sub.ai_result as Record<string, unknown>}
+        analysis={freeAnalysis as Record<string, unknown> | null}
+        lineItems={freeLineItems ?? null}
         token={token}
         variant="token"
       />
@@ -43,7 +55,11 @@ export default async function ReportPage({ params }: PageProps) {
   }
 
   // Processing or paid but report not ready yet
-  if (sub.status !== "complete" || sub.ai_result == null) {
+  const isPremiumUnlocked =
+    sub.status === "complete" ||
+    sub.status === "premium_ready" ||
+    (sub as { paid_at?: string | null }).paid_at != null;
+  if (!isPremiumUnlocked || sub.ai_result == null) {
     return (
       <div className="min-h-[calc(100vh-8rem)] bg-neutral-950 text-white">
         <div className="mx-auto max-w-[1100px] px-6 py-16 text-center">

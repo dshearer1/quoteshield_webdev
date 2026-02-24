@@ -81,10 +81,10 @@ export async function saveSubmissionAnalysis(params: {
     await supabase.from("submission_line_items").insert(rows);
   }
 
-  // fetch submission context (address, notes, project_type)
+  // fetch submission context (address, notes, project_type, region_key from intake)
   const { data: subRow, error: subErr } = await supabase
     .from("submissions")
-    .select("id, address, project_notes, project_type")
+    .select("id, address, project_notes, project_type, region_key")
     .eq("id", submissionId)
     .single();
   if (subErr) throw subErr;
@@ -93,7 +93,10 @@ export async function saveSubmissionAnalysis(params: {
     reportJson,
     projectType: subRow?.project_type ?? null,
   });
-  const region_key = extractStateFromAddress(subRow?.address ?? null);
+  // Benchmark region must come from intake zip/address, not from PDF-extracted address.
+  const region_key =
+    (subRow?.region_key && String(subRow.region_key).trim()) ||
+    extractStateFromAddress(subRow?.address ?? null);
 
   const unitNorm = normalizeRoofingToSquares({
     reportJson,
@@ -216,6 +219,28 @@ export async function saveSubmissionAnalysis(params: {
       region_key,
     })
     .eq("id", submissionId);
+
+  // Trigger pricing engine (line-item-based $/square + market position). Do not block on failure.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && serviceRoleKey && lineItems.length > 0) {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/analyze-pricing`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ submission_id: submissionId }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("[saveSubmissionAnalysis] analyze-pricing failed:", res.status, text);
+      }
+    } catch (e) {
+      console.error("[saveSubmissionAnalysis] analyze-pricing trigger error:", e);
+    }
+  }
 
   console.log("[/api/process] saveSubmissionAnalysis completed");
 }

@@ -12,20 +12,48 @@ const STORAGE_BUCKET = "quotes";
 
 const OPENAI_TIMEOUT_MS = 90_000;
 
+function elapsed(ms: number): string {
+  return `${Math.round(ms)}ms`;
+}
+
+/** Step-by-step tracer: logs step name, elapsed time since start, and optional extra. Returns current step for error reporting. */
+function createTracer(startTime: number) {
+  let lastStep = "init";
+  return {
+    trace(step: string, extra?: Record<string, unknown>) {
+      lastStep = step;
+      const ms = Date.now() - startTime;
+      if (extra) {
+        console.log(`[/api/process] ${step} ${elapsed(ms)}`, extra);
+      } else {
+        console.log(`[/api/process] ${step} ${elapsed(ms)}`);
+      }
+      return lastStep;
+    },
+    get step() {
+      return lastStep;
+    },
+  };
+}
+
 /**
  * POST /api/process
  * Body: { submissionId: string }
  *
+ * Uses server-side supabaseAdmin (service role) only — no browser client.
  * 1) Sets status=processing immediately for draft/failed.
  * 2) Runs PDF download + analyzeQuote + scoring.
  * 3) On success: status=complete (or pending_payment for unpaid preview).
- * 4) On error: status=failed, ai_error=message; returns 504 on timeout.
+ * 4) On error: status=error, ai_error=message, processed_at=now(); returns 504 on timeout.
  */
 export async function POST(req: Request) {
   const sb = supabaseAdmin;
-  let submissionId: string | null;
+  let submissionId: string | null = null;
+  const startTime = Date.now();
+  const tracer = createTracer(startTime);
 
   try {
+    tracer.trace("parse_body");
     const body = await req.json().catch(() => ({}));
     console.log("[/api/process] called with body:", body);
 
@@ -61,18 +89,20 @@ export async function POST(req: Request) {
     if (!submissionId) {
       console.error("[/api/process] Missing submissionId. Body:", body);
       return NextResponse.json(
-        { ok: false, error: "Missing submissionId" },
+        { ok: false, error: "Missing submissionId", step: "resolve_id" },
         { status: 400 }
       );
     }
 
-    console.log("[/api/process] submissionId:", submissionId);
+    tracer.trace("resolve_id", { submissionId });
 
+    const t0Fetch = Date.now();
     const { data: sub, error: subErr } = await sb
       .from("submissions")
       .select("id, status, file_path, project_type, project_notes, address, project_value, contractor_name, ai_result, quote_type")
       .eq("id", submissionId)
       .single();
+    tracer.trace("fetch_submission", { elapsed: elapsed(Date.now() - t0Fetch), error: subErr?.message ?? null });
 
     if (subErr || !sub) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
@@ -133,7 +163,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, alreadyProcessed: true });
     }
 
-    // Set status=processing immediately so scan page shows "processing" and can poll.
+    tracer.trace("set_processing");
     await sb
       .from("submissions")
       .update({ status: "processing", analysis_status: "parsing", ai_error: null })
@@ -146,20 +176,50 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    console.log("[api/process] file_path:", filePath);
-
+    const t0Download = Date.now();
+    tracer.trace("download_pdf_start", { filePath, bucket: STORAGE_BUCKET });
     const { data, error: dlErr } = await sb.storage.from(STORAGE_BUCKET).download(filePath);
+    tracer.trace("download_pdf", { elapsed: elapsed(Date.now() - t0Download), error: dlErr?.message ?? null, hasData: !!data });
     if (dlErr || !data) {
-      console.error("[api/process] PDF download failed:", dlErr?.message ?? "no data");
+      console.error("[api/process] PDF download failed:", dlErr?.message ?? "no data", "path:", filePath, "bucket:", STORAGE_BUCKET);
+      await sb
+        .from("submissions")
+        .update({ status: "error", analysis_status: "error", ai_error: "Failed to download PDF. The file may be missing or inaccessible.", processed_at: new Date().toISOString() })
+        .eq("id", submissionId);
       return NextResponse.json(
         { error: "Failed to download PDF. The file may be missing or inaccessible." },
         { status: 502 }
       );
     }
-    const arrayBuffer = await data.arrayBuffer();
-    const pdfBuffer = Buffer.from(arrayBuffer);
-    console.log("[/api/process] pdf bytes:", pdfBuffer?.length ?? 0);
-    if (!pdfBuffer || pdfBuffer.length === 0) throw new Error("PDF download returned 0 bytes");
+
+    tracer.trace("pdf_buffer_start");
+    let pdfBuffer: Buffer;
+    try {
+      const arrayBuffer = await data.arrayBuffer();
+      pdfBuffer = Buffer.from(arrayBuffer);
+    } catch (parseErr: unknown) {
+      const parseMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      console.error("[api/process] PDF buffer/parse failed:", parseMsg, parseErr);
+      await sb
+        .from("submissions")
+        .update({ status: "error", analysis_status: "error", ai_error: `PDF read failed: ${parseMsg}`, processed_at: new Date().toISOString() })
+        .eq("id", submissionId);
+      return NextResponse.json(
+        { error: "PDF could not be read. The file may be corrupted or in an unsupported format." },
+        { status: 502 }
+      );
+    }
+    tracer.trace("pdf_buffer", { bytes: pdfBuffer?.length ?? 0 });
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      await sb
+        .from("submissions")
+        .update({ status: "error", analysis_status: "error", ai_error: "PDF download returned 0 bytes", processed_at: new Date().toISOString() })
+        .eq("id", submissionId);
+      return NextResponse.json(
+        { error: "PDF download returned 0 bytes" },
+        { status: 502 }
+      );
+    }
 
     const rawNotes = sub.project_notes ?? "";
     const ptMatch = rawNotes.match(/Property type:\s*(.+?)(?=\n|$)/i);
@@ -199,14 +259,20 @@ export async function POST(req: Request) {
         OPENAI_TIMEOUT_MS
       );
     });
+    tracer.trace("ai_analyze_start");
     let analyzeResult: Awaited<ReturnType<typeof analyzeQuote>>;
+    const t0Ai = Date.now();
     try {
-      console.log("[api/process] openai start");
       analyzeResult = await Promise.race([analyzePromise, timeoutPromise]);
-      console.log("[api/process] openai end");
+      tracer.trace("ai_analyze", { elapsed: elapsed(Date.now() - t0Ai) });
     } catch (openaiErr: unknown) {
+      console.error("[api/process] openai error after", elapsed(Date.now() - t0Ai), openaiErr);
       const isTimeout = openaiErr instanceof Error && (openaiErr as { statusCode?: number }).statusCode === 504;
-      console.error("[api/process] openai error:", openaiErr);
+      const errMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
+      await sb
+        .from("submissions")
+        .update({ status: "error", analysis_status: "error", ai_error: errMsg, processed_at: new Date().toISOString() })
+        .eq("id", submissionId);
       throw isTimeout ? Object.assign(new Error("Analysis timed out"), { statusCode: 504 }) : openaiErr;
     }
 
@@ -245,19 +311,30 @@ export async function POST(req: Request) {
     const ai_confidence = (r?.summary as { confidence?: string })?.confidence ?? (r?.confidence as string) ?? "medium";
     const isRevisedFree = isUnpaidPreview && sub.quote_type === "revised";
 
+    tracer.trace("save_full_analysis_start");
+    const t0Save = Date.now();
     const { error: saveErr } = await saveFullAnalysis(submissionId, analyzeResult, {
       isUnpaidPreview,
       isRevisedFree,
       address: sub.address ?? null,
     });
+    tracer.trace("save_full_analysis", { elapsed: elapsed(Date.now() - t0Save), error: saveErr?.message ?? null });
 
-    if (saveErr) throw saveErr;
-    console.log("[/api/process] saveFullAnalysis completed");
+    if (saveErr) {
+      await sb
+        .from("submissions")
+        .update({ status: "error", analysis_status: "error", ai_error: saveErr.message ?? String(saveErr), processed_at: new Date().toISOString() })
+        .eq("id", submissionId);
+      throw saveErr;
+    }
 
+    tracer.trace("done", { total: elapsed(Date.now() - startTime) });
     return NextResponse.json({ ok: true, confidence: ai_confidence });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[/api/process] failed:", err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    const step = tracer.step;
+    console.error("[/api/process] failed", { submissionId, step, err, stack });
     if (submissionId) {
       try {
         await sb
@@ -266,6 +343,7 @@ export async function POST(req: Request) {
             status: "error",
             analysis_status: "error",
             ai_error: msg,
+            processed_at: new Date().toISOString(),
           })
           .eq("id", submissionId);
       } catch (updateEx) {
@@ -273,8 +351,9 @@ export async function POST(req: Request) {
       }
     }
     const statusCode = (err as { statusCode?: number })?.statusCode ?? 500;
+    const isDev = process.env.NODE_ENV === "development";
     return NextResponse.json(
-      { ok: false, error: msg },
+      { ok: false, step, message: msg, error: msg, ...(isDev && stack ? { stack } : {}) },
       { status: statusCode === 504 ? 504 : 500 }
     );
   }

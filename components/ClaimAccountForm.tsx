@@ -10,12 +10,15 @@ export function ClaimAccountForm({
   submissionId,
   claimToken = null,
   sessionId = null,
+  onSuccess,
 }: {
   prefilledEmail: string;
   readOnlyEmail: boolean;
   submissionId: string | null;
   claimToken?: string | null;
   sessionId?: string | null;
+  /** When provided, called after successful link-submission instead of redirecting to dashboard. */
+  onSuccess?: () => void;
 }) {
   const [email, setEmail] = useState(prefilledEmail);
   const [password, setPassword] = useState("");
@@ -116,6 +119,11 @@ export function ClaimAccountForm({
         return;
       }
 
+      if (onSuccess) {
+        onSuccess();
+        setLoading(false);
+        return;
+      }
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

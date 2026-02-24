@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Submission not found" }, { status: 404 });
   }
 
-  if (sub.status === "processing" || sub.status === "complete") {
+  if (sub.status === "processing" || sub.status === "complete" || sub.status === "premium_ready") {
     return NextResponse.json({ received: true });
   }
 

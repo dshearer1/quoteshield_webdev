@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
+import { buildRegionKey } from "@/lib/addressUtils";
 
 export const runtime = "nodejs";
 
@@ -37,10 +38,12 @@ export async function POST(req: Request) {
 
     const token = makeToken();
     const projectId = projectIdInput && typeof projectIdInput === "string" ? projectIdInput : crypto.randomUUID();
+    const region_key = buildRegionKey(address) ?? null;
     const insertPayload: Record<string, unknown> = {
       email,
       project_type: projectType,
       address: address || null,
+      region_key: region_key ?? undefined,
       customer_name: customerName || null,
       status: "draft",
       token,

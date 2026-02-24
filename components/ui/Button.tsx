@@ -41,12 +41,7 @@ export default function Button({ className = "", loading, disabled, variant = "d
           <span>{variant === "inverted" ? "Continue…" : "Redirecting…"}</span>
         </>
       ) : (
-        <>
-          {children}
-          {variant !== "ghost" && (
-            <span className="transition-transform group-hover:translate-x-0.5">→</span>
-          )}
-        </>
+        children
       )}
     </button>
   );

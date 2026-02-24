@@ -25,17 +25,20 @@ export async function POST(req: Request) {
     const sb = supabaseAdmin;
     const { data: sub, error: subErr } = await sb
       .from("submissions")
-      .select("id, email")
+      .select("id, email, token")
       .eq("id", submissionId)
       .single();
 
     if (subErr || !sub) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
 
-    const successUrl = `${appUrl.replace(/\/$/, "")}/start/scan?submissionId=${encodeURIComponent(submissionId)}&checkout=success`;
+    const token = (sub.token ?? "") || submissionId;
+    const baseUrl = appUrl.replace(/\/$/, "");
+    const successUrl = `${baseUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${baseUrl}/r/${encodeURIComponent(token)}`;
 
-    // Webhook (Edge Function) reads metadata.submission_id and metadata.supabase_user_id
     const metadata: Record<string, string> = {
       submission_id: submissionId,
+      token: String(token),
     };
     if (supabaseUserId) metadata.supabase_user_id = supabaseUserId;
 
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
-      cancel_url: `${appUrl.replace(/\/$/, "")}/start/scan?submissionId=${encodeURIComponent(submissionId)}`,
+      cancel_url: cancelUrl,
       metadata,
       ...(supabaseUserId && { client_reference_id: supabaseUserId }),
       ...(sub.email && { customer_email: sub.email }),

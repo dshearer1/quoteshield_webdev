@@ -2,14 +2,10 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabaseBrowser";
 
 import UploadDropzone from "@/components/UploadDropzone";
-import PriceCard from "@/components/PriceCard";
-import Stepper from "@/components/Stepper";
-
-import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -26,51 +22,84 @@ const PROJECT_TYPES = [
   "Other",
 ];
 
-const PROPERTY_TYPES = [
-  "Single-family home",
-  "Townhome / Duplex",
-  "Multi-family",
-  "Commercial",
-];
+const PROPERTY_CLASS_OPTIONS = ["Residential", "Commercial", "Not sure"];
 
-const PROJECT_SIZE_ROOFING = [
-  "Under 15 squares (~1,500 sq ft roof)",
-  "15–30 squares",
-  "30+ squares",
-  "Not sure",
-];
+const ROOFING_JOB_TYPES = ["Repair", "Full replacement", "Not sure"];
+const SIDING_JOB_TYPES = ["Partial", "Full", "Not sure"];
+const SIDING_MATERIALS = ["Vinyl", "Fiber cement", "Wood", "Other", "Not sure"];
+const WINDOW_COUNT_OPTIONS = ["1–5", "6–10", "11–20", "21+", "Not sure"];
+const WINDOW_SCOPE_OPTIONS = ["Whole home", "Partial", "Not sure"];
+const HVAC_SCOPE_OPTIONS = ["Replace", "New install", "Not sure"];
+const HVAC_SYSTEM_TYPES = ["Central split", "Package", "Mini-split", "Not sure"];
+const PLUMBING_SCOPE_OPTIONS = ["Repair", "Replace", "Install", "Not sure"];
+const ELECTRICAL_SCOPE_OPTIONS = ["Repair", "Panel upgrade", "Rewire", "New install", "Not sure"];
+const CONCRETE_TYPES = ["Driveway", "Patio", "Walkway", "Slab", "Foundation", "Other"];
+const REMODEL_AREAS = ["Kitchen", "Bath", "Flooring", "Paint", "Full", "Other"];
 
-const SPECIAL_CONDITIONS_OPTIONS = [
-  "Insurance claim involved",
-  "Active leak / emergency repair",
-  "Steep roof or complex layout",
-  "Full tear-off included",
-  "Urgent timeline",
-];
+/** Quick Question config: ask only if benchmark data missing or low confidence (we use Step 1 empty / "Not sure" as proxy). Max 2 per session. */
+type QuickQuestionOption = string;
+interface QuickQuestionDef {
+  id: string;
+  question: string;
+  options: QuickQuestionOption[];
+  step1Key: string;
+  /** If set, use this to decide if we need to ask (current value from Step 1). */
+  getCurrentValue: (ctx: QuickQuestionContext) => string;
+}
+interface QuickQuestionContext {
+  roofingJobType: string;
+  insuranceClaim: string;
+  sidingJobType: string;
+  sidingMaterialKnown: string;
+  windowCountEst: string;
+  windowScope: string;
+  hvacScope: string;
+  hvacSystemType: string;
+  plumbingScope: string;
+  electricalScope: string;
+  concreteType: string;
+  remodelArea: string;
+  otherDescription: string;
+}
 
-const ROOF_MATERIALS = [
-  "Asphalt shingles",
-  "Metal",
-  "Tile",
-  "Flat / TPO",
-  "Not sure",
-];
-
-const HOME_HEIGHTS = [
-  "1 story",
-  "2 story",
-  "3+ story",
-  "Not sure",
-];
-
-const NOTES_QUICK_TAGS = [
-  "Insurance job",
-  "Leak damage",
-  "HOA restrictions",
-  "Solar panels",
-  "Multiple layers",
-  "Wood rot suspected",
-];
+const QUICK_QUESTIONS: Record<string, QuickQuestionDef[]> = {
+  Roofing: [
+    { id: "roof_scope", question: "Is this a repair or full replacement?", options: ["Repair", "Full replacement", "Not sure"], step1Key: "Roofing job type", getCurrentValue: (c) => c.roofingJobType },
+    { id: "roof_insurance", question: "Is this an insurance claim?", options: ["Yes", "No", "Not sure"], step1Key: "Insurance claim", getCurrentValue: (c) => c.insuranceClaim },
+  ],
+  Siding: [
+    { id: "siding_scope", question: "Is this partial repair or full replacement?", options: ["Partial repair", "Full replacement", "Not sure"], step1Key: "Siding job type", getCurrentValue: (c) => c.sidingJobType },
+    { id: "siding_material", question: "What material (if known)?", options: ["Vinyl", "Fiber cement", "Wood", "Other", "Not sure"], step1Key: "Siding material", getCurrentValue: (c) => c.sidingMaterialKnown },
+  ],
+  Windows: [
+    { id: "windows_count", question: "How many windows are being replaced?", options: ["1–5", "6–10", "11–20", "21+", "Not sure"], step1Key: "Window count", getCurrentValue: (c) => c.windowCountEst },
+    { id: "windows_scope", question: "Is this whole home or partial?", options: ["Whole home", "Partial", "Not sure"], step1Key: "Window scope", getCurrentValue: (c) => c.windowScope },
+  ],
+  HVAC: [
+    { id: "hvac_type", question: "What type of system is this?", options: ["Central split", "Package unit", "Mini-split", "Not sure"], step1Key: "HVAC system type", getCurrentValue: (c) => c.hvacSystemType },
+    { id: "hvac_scope", question: "Is this a replacement or new install?", options: ["Replace existing", "New install", "Not sure"], step1Key: "HVAC scope", getCurrentValue: (c) => c.hvacScope },
+  ],
+  Plumbing: [
+    { id: "plumbing_scope", question: "What best describes the job?", options: ["Repair", "Replace", "New install", "Not sure"], step1Key: "Plumbing scope", getCurrentValue: (c) => c.plumbingScope },
+    { id: "plumbing_area", question: "Where is the work focused?", options: ["Kitchen", "Bathroom", "Water heater", "Main line / drain", "Not sure"], step1Key: "Plumbing area", getCurrentValue: () => "" },
+  ],
+  Electrical: [
+    { id: "electrical_scope", question: "What best describes the job?", options: ["Repair", "Panel upgrade", "Rewire", "New install", "Not sure"], step1Key: "Electrical scope", getCurrentValue: (c) => c.electricalScope },
+    { id: "electrical_property", question: "Is this for a home or business?", options: ["Home", "Business", "Not sure"], step1Key: "Property type", getCurrentValue: () => "" },
+  ],
+  Concrete: [
+    { id: "concrete_type", question: "What is being poured?", options: ["Driveway", "Patio", "Walkway", "Slab", "Foundation", "Other"], step1Key: "Concrete type", getCurrentValue: (c) => c.concreteType },
+    { id: "concrete_demolition", question: "Does it include demolition?", options: ["Yes", "No", "Not sure"], step1Key: "Demolition included", getCurrentValue: () => "" },
+  ],
+  Remodel: [
+    { id: "remodel_area", question: "Which area is being remodeled?", options: ["Kitchen", "Bathroom", "Flooring", "Paint", "Full remodel", "Other"], step1Key: "Remodel area", getCurrentValue: (c) => c.remodelArea },
+    { id: "remodel_scale", question: "Is this a small update or full renovation?", options: ["Small update", "Full renovation", "Not sure"], step1Key: "Remodel scale", getCurrentValue: () => "" },
+  ],
+  Other: [
+    { id: "other_category", question: "What type of project is this closest to?", options: ["Exterior", "Interior", "Mechanical", "Not sure"], step1Key: "Project category", getCurrentValue: () => "" },
+    { id: "other_description", question: "Short description", options: [], step1Key: "Other description", getCurrentValue: (c) => c.otherDescription },
+  ],
+};
 
 /** Extract ZIP from stored address (handles "35242", "City, ST 35242", etc.) */
 function extractZipFromAddress(addr: string | null): string {
@@ -79,24 +108,29 @@ function extractZipFromAddress(addr: string | null): string {
   return match ? match[0] : addr.trim();
 }
 
-/** Build project_notes from all optional fields. */
-function buildProjectNotes(
-  propertyType: string,
-  projectSize: string,
-  specialConditions: string[],
-  roofMaterial: string,
-  homeHeight: string,
-  userNotes: string
-): string {
+/** Build project_notes from Step 1 + Step 2 optional fields. */
+function buildProjectNotes(step1: Record<string, string>, step2: Record<string, string>): string {
   const lines: string[] = [];
-  if (propertyType.trim()) lines.push(`Property type: ${propertyType.trim()}`);
-  if (projectSize.trim()) lines.push(`Project size: ${projectSize.trim()}`);
-  if (specialConditions.length > 0) lines.push(`Special conditions: ${specialConditions.join(", ")}`);
-  if (roofMaterial.trim()) lines.push(`Roof material: ${roofMaterial.trim()}`);
-  if (homeHeight.trim()) lines.push(`Home height: ${homeHeight.trim()}`);
-  if (userNotes.trim()) lines.push(userNotes.trim());
+  Object.entries(step1).forEach(([key, val]) => {
+    if (val?.trim()) lines.push(`${key}: ${val.trim()}`);
+  });
+  Object.entries(step2).forEach(([key, val]) => {
+    if (val?.trim()) lines.push(`${key}: ${val.trim()}`);
+  });
   return lines.join("\n");
 }
+
+/** Step-based header content (title, subtitle). */
+const STEP_HEADER_CONFIG: Record<number, { title: string; subtitle: string }> = {
+  1: {
+    title: "Start your review",
+    subtitle: "Tell us a few details about your project.",
+  },
+  2: {
+    title: "Upload your quote",
+    subtitle: "We'll scan it and show your pricing summary instantly.",
+  },
+};
 
 export default function StartPage() {
   const searchParams = useSearchParams();
@@ -104,28 +138,50 @@ export default function StartPage() {
   const projectIdFromUrl = searchParams.get("project_id");
   const quoteTypeFromUrl = searchParams.get("type");
 
-  const [step, setStep] = useState(1);
+  const [step, setStepState] = useState(1);
+  const stepRef = useRef(1);
+  const setStep = useCallback((newStep: number, reason: string) => {
+    const from = stepRef.current;
+    console.log("[STEP NAV]", { from, to: newStep, source: "setStep", reason });
+    stepRef.current = newStep;
+    setStepState(newStep);
+  }, []);
+  useEffect(() => { stepRef.current = step; }, [step]);
+
   const [submissionId, setSubmissionId] = useState<string | null>(() => submissionIdFromUrl);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [alreadyComplete, setAlreadyComplete] = useState(false);
   const [hasFileFromDraft, setHasFileFromDraft] = useState(false);
 
-  // Step 1
+  // Step 1 — always required
   const [projectType, setProjectType] = useState("Roofing");
   const [zip, setZip] = useState("");
-  const [propertyType, setPropertyType] = useState("");
-  const [projectSize, setProjectSize] = useState("");
-  const [specialConditions, setSpecialConditions] = useState<string[]>([]);
+  // Step 1 — conditional by project type
+  const [roofingJobType, setRoofingJobType] = useState("");
+  const [insuranceClaim, setInsuranceClaim] = useState("");
+  const [propertyClass, setPropertyClass] = useState("");
+  const [sidingJobType, setSidingJobType] = useState("");
+  const [sidingMaterialKnown, setSidingMaterialKnown] = useState("");
+  const [windowCountEst, setWindowCountEst] = useState("");
+  const [windowScope, setWindowScope] = useState("");
+  const [hvacScope, setHvacScope] = useState("");
+  const [hvacSystemType, setHvacSystemType] = useState("");
+  const [plumbingScope, setPlumbingScope] = useState("");
+  const [electricalScope, setElectricalScope] = useState("");
+  const [concreteType, setConcreteType] = useState("");
+  const [remodelArea, setRemodelArea] = useState("");
+  const [otherDescription, setOtherDescription] = useState("");
 
-  // Step 2
+  // Step 2 — upload only; optional Quick Questions (max 2) if benchmark data missing
   const [file, setFile] = useState<File | null>(null);
-  const [roofMaterial, setRoofMaterial] = useState("");
-  const [homeHeight, setHomeHeight] = useState("");
+  const fileRef = useRef<File | null>(null);
+  useEffect(() => { fileRef.current = file; }, [file]);
   const [projectValue, setProjectValue] = useState("");
   const [contractorName, setContractorName] = useState("");
-  const [projectNotes, setProjectNotes] = useState("");
+  const [quickQuestionIndex, setQuickQuestionIndex] = useState(0);
+  const [quickQuestionAnswers, setQuickQuestionAnswers] = useState<Record<string, string>>({});
 
-  // Step 3
+  // Step 2 — email (required for results copy)
   const [email, setEmail] = useState("");
   const [customerName, setCustomerName] = useState("");
 
@@ -136,19 +192,62 @@ export default function StartPage() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [attemptedStep1, setAttemptedStep1] = useState(false);
   const [attemptedStep2, setAttemptedStep2] = useState(false);
-  const [attemptedStep3, setAttemptedStep3] = useState(false);
+  const [roofingOptionalOpen, setRoofingOptionalOpen] = useState(false);
+  const [sidingOptionalOpen, setSidingOptionalOpen] = useState(false);
+  const [windowsOptionalOpen, setWindowsOptionalOpen] = useState(false);
+  const [hvacOptionalOpen, setHvacOptionalOpen] = useState(false);
 
   const zipOk = useMemo(() => /^\d{5}(-\d{4})?$/.test(zip.trim()), [zip]);
   const emailOk = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()), [email]);
 
-  const step1Valid =
-    projectType.trim() !== "" &&
-    zipOk &&
-    propertyType.trim() !== "" &&
-    projectSize.trim() !== "";
+  const step1TypeValid = useMemo(() => {
+    switch (projectType) {
+      case "Roofing": return roofingJobType.trim() !== "";
+      case "Siding": return sidingJobType.trim() !== "";
+      case "Windows": return true;
+      case "HVAC": return hvacScope.trim() !== "";
+      case "Plumbing": return plumbingScope.trim() !== "";
+      case "Electrical": return electricalScope.trim() !== "";
+      case "Concrete": return concreteType.trim() !== "";
+      case "Remodel": return remodelArea.trim() !== "";
+      case "Other": return otherDescription.trim().split(/\s+/).filter(Boolean).length >= 1;
+      default: return false;
+    }
+  }, [projectType, roofingJobType, sidingJobType, hvacScope, plumbingScope, electricalScope, concreteType, remodelArea, otherDescription]);
+
+  const step1Valid = projectType.trim() !== "" && zipOk && step1TypeValid;
 
   const step2Valid = !!file;
-  const step3Valid = emailOk && (!!file || (!!submissionId && hasFileFromDraft));
+
+  const quickQuestionContext: QuickQuestionContext = useMemo(() => ({
+    roofingJobType,
+    insuranceClaim,
+    sidingJobType,
+    sidingMaterialKnown,
+    windowCountEst,
+    windowScope,
+    hvacScope,
+    hvacSystemType,
+    plumbingScope,
+    electricalScope,
+    concreteType,
+    remodelArea,
+    otherDescription,
+  }), [roofingJobType, insuranceClaim, sidingJobType, sidingMaterialKnown, windowCountEst, windowScope, hvacScope, hvacSystemType, plumbingScope, electricalScope, concreteType, remodelArea, otherDescription]);
+
+  const quickQuestionsToShow = useMemo(() => {
+    if (!file) return [];
+    const list = QUICK_QUESTIONS[projectType] ?? [];
+    const ctx = quickQuestionContext;
+    const needed = list.filter((q) => {
+      const v = q.getCurrentValue(ctx).trim();
+      return !v || v === "Not sure";
+    });
+    return needed.slice(0, 2);
+  }, [file, projectType, quickQuestionContext]);
+
+  const showingQuickQuestion = quickQuestionsToShow.length > 0 && quickQuestionIndex < quickQuestionsToShow.length;
+  const currentQuickQuestion = showingQuickQuestion ? quickQuestionsToShow[quickQuestionIndex] : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -183,30 +282,29 @@ export default function StartPage() {
       setProjectValue(data.project_value != null ? String(data.project_value) : "");
       setZip(extractZipFromAddress(data.address ?? null));
       const notes = data.project_notes ?? "";
-      const ptMatch = notes.match(/Property type:\s*(.+?)(?=\n|$)/i);
-      const psMatch = notes.match(/Project size:\s*(.+?)(?=\n|$)/i);
-      const scMatch = notes.match(/Special conditions:\s*(.+?)(?=\n|$)/i);
-      const rmMatch = notes.match(/Roof material:\s*(.+?)(?=\n|$)/i);
-      const hhMatch = notes.match(/Home height:\s*(.+?)(?=\n|$)/i);
-      if (ptMatch) setPropertyType(ptMatch[1].trim());
-      if (psMatch) setProjectSize(psMatch[1].trim());
-      if (scMatch) setSpecialConditions(scMatch[1].split(",").map((s) => s.trim()).filter(Boolean));
-      if (rmMatch) setRoofMaterial(rmMatch[1].trim());
-      if (hhMatch) setHomeHeight(hhMatch[1].trim());
-      const rest = notes
-        .replace(/\n?Property type:.*(?=\n|$)/gi, "\n")
-        .replace(/\n?Project size:.*(?=\n|$)/gi, "\n")
-        .replace(/\n?Special conditions:.*(?=\n|$)/gi, "\n")
-        .replace(/\n?Roof material:.*(?=\n|$)/gi, "\n")
-        .replace(/\n?Home height:.*(?=\n|$)/gi, "\n")
-        .replace(/\n+/g, "\n")
-        .trim();
-      setProjectNotes(rest);
+      const parseKey = (key: string) => notes.match(new RegExp(`${key}:\\s*(.+?)(?=\\n|$)`, "i"))?.[1]?.trim() ?? "";
+      setRoofingJobType(parseKey("Roofing job type"));
+      setInsuranceClaim(parseKey("Insurance claim"));
+      setPropertyClass(parseKey("Property class"));
+      setSidingJobType(parseKey("Siding job type"));
+      setSidingMaterialKnown(parseKey("Siding material"));
+      setWindowCountEst(parseKey("Window count"));
+      setWindowScope(parseKey("Window scope"));
+      setHvacScope(parseKey("HVAC scope"));
+      setHvacSystemType(parseKey("HVAC system type"));
+      setPlumbingScope(parseKey("Plumbing scope"));
+      setElectricalScope(parseKey("Electrical scope"));
+      setConcreteType(parseKey("Concrete type"));
+      setRemodelArea(parseKey("Remodel area"));
+      setOtherDescription(parseKey("Other description"));
       setSubmissionId(data.submissionId ?? id);
       setHasFileFromDraft(!!data.hasFile);
-      if (data.hasFile) setStep(3);
-      else if (data.contractor_name || data.project_value) setStep(3);
-      else setStep(2);
+      if (stepRef.current === 2) {
+        console.log("[STEP NAV] loadDraft skipping step change — user already on step 2", { hasFileRef: !!fileRef.current });
+        return;
+      }
+      if (data.hasFile || data.contractor_name || data.project_value) setStep(2, "load-draft");
+      else setStep(2, "load-draft");
     } finally {
       setDraftLoaded(true);
     }
@@ -217,10 +315,24 @@ export default function StartPage() {
     loadDraft(submissionIdFromUrl);
   }, [submissionIdFromUrl, draftLoaded, loadDraft]);
 
+  // Reset optional expand states when project type changes
+  useEffect(() => {
+    setRoofingOptionalOpen(false);
+    setSidingOptionalOpen(false);
+    setWindowsOptionalOpen(false);
+    setHvacOptionalOpen(false);
+  }, [projectType]);
+
+  /** Upload state only — never triggers step navigation. Step advances only on Generate button click. */
   function onPickFile(f: File | null) {
     setErr(null);
     setFileErr(null);
-    if (!f) return setFile(null);
+    if (!f) {
+      fileRef.current = null;
+      setQuickQuestionIndex(0);
+      setQuickQuestionAnswers({});
+      return setFile(null);
+    }
     if (f.type !== "application/pdf") {
       setFile(null);
       return setFileErr("Please upload a PDF file.");
@@ -229,7 +341,11 @@ export default function StartPage() {
       setFile(null);
       return setFileErr("PDF is too large (max 20MB).");
     }
+    fileRef.current = f; // sync ref so loadDraft guard sees it before useEffect runs
+    setQuickQuestionIndex(0);
+    setQuickQuestionAnswers({});
     setFile(f);
+    // No setStep — upload = preparation; Generate = commitment
   }
 
   function handleStep1Next(e: React.FormEvent) {
@@ -237,21 +353,25 @@ export default function StartPage() {
     setErr(null);
     setAttemptedStep1(true);
     if (!step1Valid) return;
-    setStep(2);
+    setStep(2, "step1-continue");
   }
 
-  function handleStep2Next(e: React.FormEvent) {
-    e.preventDefault();
+  function handleQuickQuestionAnswer(value: string) {
+    if (!currentQuickQuestion) return;
+    setQuickQuestionAnswers((prev) => ({ ...prev, [currentQuickQuestion.id]: value }));
+    if (quickQuestionIndex + 1 < quickQuestionsToShow.length) {
+      setQuickQuestionIndex((i) => i + 1);
+    } else {
+      setQuickQuestionIndex(quickQuestionsToShow.length);
+    }
+    // No step change — return to "Ready to scan"; user must click Generate to advance
+  }
+
+  /** Step 2 submit: validate file + email, then create draft, update, upload, redirect to summary. No step 3. */
+  async function handleStep2Submit(e?: React.MouseEvent) {
+    e?.preventDefault();
     setErr(null);
     setAttemptedStep2(true);
-    if (!file) return;
-    setStep(3);
-  }
-
-  async function handleStep3Submit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    setAttemptedStep3(true);
     if (!emailOk) return setErr("Please enter a valid email.");
     if (!file && !(submissionId && hasFileFromDraft))
       return setErr("Please upload a PDF quote.");
@@ -282,14 +402,37 @@ export default function StartPage() {
         setSubmissionId(effectiveSubmissionId);
       }
 
-      const enrichedNotes = buildProjectNotes(
-        propertyType,
-        projectSize,
-        specialConditions,
-        roofMaterial,
-        homeHeight,
-        projectNotes
-      );
+      const step1Notes: Record<string, string> = {};
+      if (projectType === "Roofing") {
+        if (roofingJobType.trim()) step1Notes["Roofing job type"] = roofingJobType.trim();
+        if (insuranceClaim.trim()) step1Notes["Insurance claim"] = insuranceClaim.trim();
+        if (propertyClass.trim()) step1Notes["Property class"] = propertyClass.trim();
+      } else if (projectType === "Siding") {
+        if (sidingJobType.trim()) step1Notes["Siding job type"] = sidingJobType.trim();
+        if (sidingMaterialKnown.trim()) step1Notes["Siding material"] = sidingMaterialKnown.trim();
+        if (propertyClass.trim()) step1Notes["Property class"] = propertyClass.trim();
+      } else if (projectType === "Windows") {
+        if (windowCountEst.trim()) step1Notes["Window count"] = windowCountEst.trim();
+        if (windowScope.trim()) step1Notes["Window scope"] = windowScope.trim();
+      } else if (projectType === "HVAC") {
+        if (hvacScope.trim()) step1Notes["HVAC scope"] = hvacScope.trim();
+        if (hvacSystemType.trim()) step1Notes["HVAC system type"] = hvacSystemType.trim();
+      } else if (projectType === "Plumbing") {
+        if (plumbingScope.trim()) step1Notes["Plumbing scope"] = plumbingScope.trim();
+      } else if (projectType === "Electrical") {
+        if (electricalScope.trim()) step1Notes["Electrical scope"] = electricalScope.trim();
+      } else if (projectType === "Concrete") {
+        if (concreteType.trim()) step1Notes["Concrete type"] = concreteType.trim();
+      } else if (projectType === "Remodel") {
+        if (remodelArea.trim()) step1Notes["Remodel area"] = remodelArea.trim();
+      } else if (projectType === "Other") {
+        if (otherDescription.trim()) step1Notes["Other description"] = otherDescription.trim();
+      }
+      (QUICK_QUESTIONS[projectType] ?? []).forEach((q) => {
+        const v = quickQuestionAnswers[q.id]?.trim();
+        if (v) step1Notes[q.step1Key] = v;
+      });
+      const enrichedNotes = buildProjectNotes(step1Notes, {});
       await fetch("/api/submissions/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -337,8 +480,7 @@ export default function StartPage() {
     }
   }
 
-  const canProceedStep2 = !!file && !loading;
-  const canProceedStep3 = (!!file || (!!submissionId && hasFileFromDraft)) && emailOk && !loading;
+  const canProceedStep2 = (!!file || (!!submissionId && hasFileFromDraft)) && emailOk && !loading;
 
   if (alreadyComplete) {
     return (
@@ -359,332 +501,402 @@ export default function StartPage() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
-      <div className="max-w-3xl mx-auto px-6 py-12 sm:py-16 lg:max-w-5xl">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Start a review</h1>
-        <p className="mt-4 text-white/80 leading-relaxed">
-          Answer a few questions to benchmark pricing in your area.
-        </p>
-        <div className="mt-8">
-          <Stepper
-            dark
-            current={step}
-            steps={["Project details", "Quote details", "Delivery"]}
-          />
-        </div>
-
-        <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-10">
-          <div className="lg:col-span-7">
-            <section className="p-6 rounded-xl border border-white/10 bg-white/5 flex flex-col">
-              {step === 1 && (
-                <form onSubmit={handleStep1Next} className="flex flex-col">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-white">Project details</h2>
-                    <p className="mt-0.5 text-sm text-white/60">Used to benchmark your quote accurately.</p>
-                    <div className="mt-3 flex gap-2">
-                      <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/70">Required</span>
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/50">Optional (improves accuracy)</span>
-                    </div>
-                    <p className="mt-3 text-xs text-white/50">Required fields are marked *</p>
-
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                      <Field dark label="Project type *" hint="Required for pricing comparison.">
-                        <Select
-                          dark
-                          value={projectType}
-                          onChange={(e) => setProjectType(e.target.value)}
-                          required
-                        >
-                          {PROJECT_TYPES.map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </Select>
-                      </Field>
-
-                      <Field dark label="Project ZIP code *" hint="Used to compare local labor and material rates.">
-                        <Input
-                          dark
-                          placeholder="e.g. 35242"
-                          value={zip}
-                          onChange={(e) => setZip(e.target.value)}
-                          maxLength={10}
-                        />
-                      </Field>
-                    </div>
-                    {attemptedStep1 && !zipOk && zip.length > 0 && (
-                      <p className="mt-1 text-xs text-red-400">Enter a valid 5-digit ZIP.</p>
-                    )}
-
-                    <div className="mt-5">
-                      <Field dark label="Property type *" hint="Impacts labor and permit expectations.">
-                        <div className="mt-2 space-y-2" role="radiogroup" aria-label="Property type">
-                          {PROPERTY_TYPES.map((opt) => (
-                            <label
-                              key={opt}
-                              className="flex cursor-pointer items-center gap-3 rounded-lg border border-neutral-600 bg-neutral-800 px-3 py-2.5 text-sm transition hover:bg-neutral-700 has-[:checked]:border-neutral-500 has-[:checked]:ring-1 has-[:checked]:ring-neutral-500"
-                            >
-                              <input
-                                type="radio"
-                                name="propertyType"
-                                value={opt}
-                                checked={propertyType === opt}
-                                onChange={() => setPropertyType(opt)}
-                                className="h-4 w-4 border-neutral-500 bg-neutral-800 text-white focus:ring-neutral-500"
-                              />
-                              <span className="text-white/90">{opt}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </Field>
-                      {attemptedStep1 && !propertyType.trim() && (
-                        <p className="mt-1 text-xs text-red-400">Select a property type.</p>
-                      )}
-                    </div>
-
-                    <div className="mt-5">
-                      <Field dark label="Approximate project size *" hint="Improves price-per-square accuracy.">
-                        <div className="mt-2 space-y-2" role="radiogroup" aria-label="Project size">
-                          {(projectType === "Roofing" ? PROJECT_SIZE_ROOFING : ["Under 15 squares (~1,500 sq ft roof)", "15–30 squares", "30+ squares", "Not sure"]).map((opt) => (
-                            <label
-                              key={opt}
-                              className="flex cursor-pointer items-center gap-3 rounded-lg border border-neutral-600 bg-neutral-800 px-3 py-2.5 text-sm transition hover:bg-neutral-700 has-[:checked]:border-neutral-500 has-[:checked]:ring-1 has-[:checked]:ring-neutral-500"
-                            >
-                              <input
-                                type="radio"
-                                name="projectSize"
-                                value={opt}
-                                checked={projectSize === opt}
-                                onChange={() => setProjectSize(opt)}
-                                className="h-4 w-4 border-neutral-500 bg-neutral-800 text-white focus:ring-neutral-500"
-                              />
-                              <span className="text-white/90">{opt}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </Field>
-                      {attemptedStep1 && !projectSize.trim() && (
-                        <p className="mt-1 text-xs text-red-400">Select a size (or Not sure).</p>
-                      )}
-                    </div>
-
-                    <div className="mt-5 pt-5 border-t border-white/10">
-                      <p className="text-xs font-medium uppercase tracking-wider text-white/50 mb-3">Optional (improves accuracy)</p>
-                      <Field dark label="Special conditions (optional — improves accuracy)" hint="These can affect cost and scheduling.">
-                    <div className="mt-2 space-y-2" role="group">
-                      {SPECIAL_CONDITIONS_OPTIONS.map((opt) => (
-                        <label
-                          key={opt}
-                          className="flex cursor-pointer items-center gap-3 rounded-lg border border-neutral-600 bg-neutral-800 px-3 py-2.5 text-sm transition hover:bg-neutral-700 has-[:checked]:border-neutral-500 has-[:checked]:ring-1 has-[:checked]:ring-neutral-500"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={specialConditions.includes(opt)}
-                            onChange={() => {
-                              setSpecialConditions((prev) =>
-                                prev.includes(opt) ? prev.filter((x) => x !== opt) : [...prev, opt]
-                              );
-                            }}
-                            className="h-4 w-4 rounded border-neutral-500 bg-neutral-800 text-white focus:ring-neutral-500"
-                          />
-                          <span className="text-white/90">{opt}</span>
-                        </label>
+      <div className="max-w-[720px] mx-auto px-6 pt-14 sm:pt-16 pb-10 sm:pb-12">
+        {STEP_HEADER_CONFIG[step] && (
+          <>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              {STEP_HEADER_CONFIG[step].title}
+            </h1>
+            <p className="mt-4 text-sm text-white/50">{STEP_HEADER_CONFIG[step].subtitle}</p>
+          </>
+        )}
+        <section
+          className={`mt-8 sm:mt-10 rounded-xl bg-white/[0.04] flex flex-col ${
+            step === 2 ? "p-10" : "pt-8 sm:pt-10 px-5 sm:px-6 pb-12 sm:pb-16"
+          }`}
+        >
+          {step === 1 && (
+            <form onSubmit={handleStep1Next} className="flex flex-col">
+              <h2 className="text-base font-semibold text-white mb-6">Project Information</h2>
+              <div className="space-y-6">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Field dark label="Project type *" hint="For pricing comparison.">
+                    <Select
+                      dark
+                      tall
+                      value={projectType}
+                      onChange={(e) => setProjectType(e.target.value)}
+                      required
+                    >
+                      {PROJECT_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
                       ))}
-                    </div>
-                      </Field>
+                    </Select>
+                  </Field>
+                  <Field dark label="ZIP code *" hint="Local labor & material rates.">
+                    <Input
+                      dark
+                      tall
+                      placeholder="e.g. 35242"
+                      value={zip}
+                      onChange={(e) => setZip(e.target.value)}
+                      maxLength={10}
+                    />
+                  </Field>
+                </div>
+                {attemptedStep1 && !zipOk && zip.length > 0 && (
+                  <p className="mt-1 text-xs text-red-400">Enter a valid 5-digit ZIP.</p>
+                )}
+
+                {/* Roofing */}
+                {projectType === "Roofing" && (
+                  <div className="space-y-4">
+                    <Field dark label="Job type *" hint="Repair vs full replacement.">
+                      <Select dark tall value={roofingJobType} onChange={(e) => setRoofingJobType(e.target.value)} required>
+                        <option value="">Select…</option>
+                        {ROOFING_JOB_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </Select>
+                    </Field>
+                    {attemptedStep1 && !roofingJobType.trim() && <p className="mt-1 text-xs text-red-400">Select a job type.</p>}
+                    <div className="mt-8">
+                      <button type="button" onClick={() => setRoofingOptionalOpen((o) => !o)} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                        {roofingOptionalOpen ? "−" : "+"} Additional details (optional)
+                      </button>
+                      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${roofingOptionalOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="mt-3 space-y-4 pt-1">
+                            <Field dark label="Insurance claim">
+                              <Select dark value={insuranceClaim} onChange={(e) => setInsuranceClaim(e.target.value)}>
+                                <option value="">Select…</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </Select>
+                            </Field>
+                            <Field dark label="Property class">
+                              <Select dark value={propertyClass} onChange={(e) => setPropertyClass(e.target.value)}>
+                                <option value="">Select…</option>
+                                {PROPERTY_CLASS_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </Select>
+                            </Field>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="mt-8 pt-5 border-t border-white/10 flex justify-end">
-                    {err && <p className="mr-4 self-center text-sm text-red-400" role="alert">{err}</p>}
-                    <Button type="submit" variant="inverted" loading={loading} disabled={!step1Valid}>
-                      Next →
-                    </Button>
+                {/* Siding */}
+                {projectType === "Siding" && (
+                  <div className="space-y-4">
+                    <Field dark label="Job type *" hint="Partial vs full replacement.">
+                      <Select dark tall value={sidingJobType} onChange={(e) => setSidingJobType(e.target.value)} required>
+                        <option value="">Select…</option>
+                        {SIDING_JOB_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </Select>
+                    </Field>
+                    {attemptedStep1 && !sidingJobType.trim() && <p className="mt-1 text-xs text-red-400">Select a job type.</p>}
+                    <div className="mt-8">
+                      <button type="button" onClick={() => setSidingOptionalOpen((o) => !o)} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                        {sidingOptionalOpen ? "−" : "+"} Additional details (optional)
+                      </button>
+                      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${sidingOptionalOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="mt-3 space-y-4 pt-1">
+                            <Field dark label="Material known">
+                              <Select dark value={sidingMaterialKnown} onChange={(e) => setSidingMaterialKnown(e.target.value)}>
+                                <option value="">Select…</option>
+                                {SIDING_MATERIALS.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </Select>
+                            </Field>
+                            <Field dark label="Property class">
+                              <Select dark value={propertyClass} onChange={(e) => setPropertyClass(e.target.value)}>
+                                <option value="">Select…</option>
+                                {PROPERTY_CLASS_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </Select>
+                            </Field>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Windows */}
+                {projectType === "Windows" && (
+                  <div className="mt-8">
+                    <button type="button" onClick={() => setWindowsOptionalOpen((o) => !o)} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                      {windowsOptionalOpen ? "−" : "+"} Add details (optional)
+                    </button>
+                    <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${windowsOptionalOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="mt-3 space-y-4 pt-1">
+                          <Field dark label="Window count estimate">
+                            <Select dark value={windowCountEst} onChange={(e) => setWindowCountEst(e.target.value)}>
+                              <option value="">Select…</option>
+                              {WINDOW_COUNT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                            </Select>
+                          </Field>
+                          <Field dark label="Scope">
+                            <Select dark value={windowScope} onChange={(e) => setWindowScope(e.target.value)}>
+                              <option value="">Select…</option>
+                              {WINDOW_SCOPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                            </Select>
+                          </Field>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* HVAC */}
+                {projectType === "HVAC" && (
+                  <div className="space-y-4">
+                    <Field dark label="Scope *" hint="Replace vs new install.">
+                      <Select dark tall value={hvacScope} onChange={(e) => setHvacScope(e.target.value)} required>
+                        <option value="">Select…</option>
+                        {HVAC_SCOPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </Select>
+                    </Field>
+                    {attemptedStep1 && !hvacScope.trim() && <p className="mt-1 text-xs text-red-400">Select scope.</p>}
+                    <div className="mt-8">
+                      <button type="button" onClick={() => setHvacOptionalOpen((o) => !o)} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                        {hvacOptionalOpen ? "−" : "+"} System type (optional)
+                      </button>
+                      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${hvacOptionalOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="mt-3 pt-1">
+                            <Field dark label="System type">
+                              <Select dark value={hvacSystemType} onChange={(e) => setHvacSystemType(e.target.value)}>
+                                <option value="">Select…</option>
+                                {HVAC_SYSTEM_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </Select>
+                            </Field>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Plumbing */}
+                {projectType === "Plumbing" && (
+                  <Field dark label="Scope *" hint="Repair, replace, or install.">
+                    <Select dark tall value={plumbingScope} onChange={(e) => setPlumbingScope(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {PLUMBING_SCOPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {projectType === "Plumbing" && attemptedStep1 && !plumbingScope.trim() && <p className="mt-1 text-xs text-red-400">Select scope.</p>}
+
+                {/* Electrical */}
+                {projectType === "Electrical" && (
+                  <Field dark label="Scope *" hint="Type of work needed.">
+                    <Select dark tall value={electricalScope} onChange={(e) => setElectricalScope(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {ELECTRICAL_SCOPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {projectType === "Electrical" && attemptedStep1 && !electricalScope.trim() && <p className="mt-1 text-xs text-red-400">Select scope.</p>}
+
+                {/* Concrete */}
+                {projectType === "Concrete" && (
+                  <Field dark label="Project type *" hint="Driveway, patio, etc.">
+                    <Select dark tall value={concreteType} onChange={(e) => setConcreteType(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {CONCRETE_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {projectType === "Concrete" && attemptedStep1 && !concreteType.trim() && <p className="mt-1 text-xs text-red-400">Select project type.</p>}
+
+                {/* Remodel */}
+                {projectType === "Remodel" && (
+                  <Field dark label="Area *" hint="Kitchen, bath, etc.">
+                    <Select dark tall value={remodelArea} onChange={(e) => setRemodelArea(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {REMODEL_AREAS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {projectType === "Remodel" && attemptedStep1 && !remodelArea.trim() && <p className="mt-1 text-xs text-red-400">Select area.</p>}
+
+                {/* Other */}
+                {projectType === "Other" && (
+                  <Field dark label="Brief description *" hint="5–8 words (e.g. deck repair, fence installation).">
+                    <Input dark tall placeholder="e.g. deck repair, fence installation" value={otherDescription} onChange={(e) => setOtherDescription(e.target.value)} maxLength={80} />
+                  </Field>
+                )}
+                {projectType === "Other" && attemptedStep1 && !otherDescription.trim() && <p className="mt-1 text-xs text-red-400">Enter a brief description.</p>}
+              </div>
+
+              <div className="mt-10 pt-8 flex flex-col items-center">
+                    {err && <p className="mb-4 text-sm text-red-400 text-center" role="alert">{err}</p>}
+                    <button
+                      type="submit"
+                      disabled={!step1Valid || loading}
+                      className="w-full max-w-[520px] min-h-[56px] px-6 py-4 rounded-xl text-base font-semibold text-black bg-white shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-all duration-200 ease-out hover:bg-[#f3f3f3] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-white inline-flex items-center justify-center"
+                    >
+                      {loading ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                            <path className="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                          </svg>
+                          <span className="ml-2">Continue…</span>
+                        </>
+                      ) : (
+                        "Continue to Quote Upload"
+                      )}
+                    </button>
                   </div>
                 </form>
               )}
 
               {step === 2 && (
-                <form onSubmit={handleStep2Next} className="flex flex-col">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-white">Quote details</h2>
-                    <p className="mt-0.5 text-sm text-white/60">Upload your quote so we can review scope and pricing.</p>
-                    <div className="mt-3 flex gap-2">
-                      <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/70">Required</span>
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/50">Optional (improves accuracy)</span>
-                    </div>
-                    <p className="mt-3 text-xs text-white/50">Required fields are marked *</p>
-
-                    <div className="mt-5">
-                      <Field dark label="Upload quote PDF *" hint="Required for analysis.">
-                        <UploadDropzone dark file={file} onPickFile={onPickFile} error={fileErr} />
-                      </Field>
+                <form onSubmit={(e) => e.preventDefault()} className="flex flex-col" noValidate>
+                  {/* Upload */}
+                  <div className="flex flex-col items-center">
+                    <div className="w-full max-w-md">
+                      <UploadDropzone dark compact file={file} onPickFile={onPickFile} error={fileErr} />
                       {attemptedStep2 && !file && !(submissionId && hasFileFromDraft) && (
-                        <p className="mt-1 text-xs text-red-400">Upload a PDF to continue.</p>
+                        <p className="mt-2 text-xs text-red-400 text-center">Upload a PDF to continue.</p>
                       )}
                     </div>
+                  </div>
 
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                      <Field dark label="Roof material (if known) — Optional (improves accuracy)" hint="Improves material pricing comparison.">
-                        <Select dark value={roofMaterial} onChange={(e) => setRoofMaterial(e.target.value)}>
-                          <option value="">Select…</option>
-                          {ROOF_MATERIALS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </Select>
-                      </Field>
+                  {/* Email — 32px below upload */}
+                  <div className="mt-8 w-full max-w-md mx-auto">
+                    <Field dark label="Email address *" hint="We'll send you a copy of your results.">
+                      <Input
+                        dark
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="you@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        readOnly={!!isLoggedIn && sessionChecked}
+                        disabled={!!isLoggedIn && sessionChecked}
+                      />
+                    </Field>
+                    {attemptedStep2 && !emailOk && email.trim() !== "" && (
+                      <p className="mt-1 text-xs text-red-400">Enter a valid email.</p>
+                    )}
+                  </div>
 
-                      <Field dark label="Home height — Optional (improves accuracy)" hint="Impacts labor and safety costs.">
-                        <Select dark value={homeHeight} onChange={(e) => setHomeHeight(e.target.value)}>
-                          <option value="">Select…</option>
-                          {HOME_HEIGHTS.map((h) => (
-                            <option key={h} value={h}>{h}</option>
-                          ))}
-                        </Select>
-                      </Field>
-                    </div>
-
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                      <Field dark label="Quoted project total (optional)" hint="Helps flag major pricing gaps faster.">
-                        <Input
-                          dark
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="e.g. 18,500"
-                          value={projectValue}
-                          onChange={(e) => setProjectValue(e.target.value.replace(/[^0-9,]/g, ""))}
-                        />
-                      </Field>
-
-                      <Field dark label="Contractor name (optional)" hint="Used for market comparison insights.">
-                        <Input dark placeholder="Company name" value={contractorName} onChange={(e) => setContractorName(e.target.value)} />
-                      </Field>
-                    </div>
-
-                    <div className="mt-5">
-                      <Field dark label="Anything we should know? (optional)" hint="Short notes only.">
-                        <textarea
-                          value={projectNotes}
-                          onChange={(e) => setProjectNotes(e.target.value)}
-                          placeholder="Damage details, access limits, HOA, permits, etc."
-                          rows={3}
-                          className="w-full rounded-lg border border-neutral-600 bg-neutral-800 px-3 py-2.5 text-sm !text-white placeholder:text-neutral-400 outline-none focus:border-neutral-500 focus:ring-1 focus:ring-neutral-500/20 resize-y"
-                        />
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {NOTES_QUICK_TAGS.map((tag) => (
+                  {/* Quick Question — only when benchmark data missing; 32px gap */}
+                  {showingQuickQuestion && currentQuickQuestion && (
+                    <div className="mt-8 w-full max-w-md mx-auto rounded-xl border border-white/10 bg-white/[0.04] p-5">
+                      {quickQuestionsToShow.length > 1 && (
+                        <p className="mb-3 text-xs text-white/45">
+                          {quickQuestionIndex + 1} of {quickQuestionsToShow.length}
+                        </p>
+                      )}
+                      <h3 className="text-base font-semibold text-white">Quick question</h3>
+                      <p className="mt-0.5 text-sm text-white/60">To improve accuracy:</p>
+                      <p className="mt-3 text-sm font-medium text-white">{currentQuickQuestion.question}</p>
+                      {currentQuickQuestion.options.length > 0 ? (
+                        <div className="mt-4 flex flex-col gap-2">
+                          {currentQuickQuestion.options.map((opt) => (
                             <button
-                              key={tag}
+                              key={opt}
                               type="button"
-                              onClick={() => setProjectNotes((n) => (n ? `${n}; ${tag}` : tag))}
-                              className="rounded-full border border-neutral-600 bg-neutral-800 px-3 py-1.5 text-xs text-white/90 hover:bg-white/15 hover:border-white/20 transition"
+                              onClick={() => handleQuickQuestionAnswer(opt)}
+                              className="w-full rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-left text-sm font-medium text-white transition-colors hover:border-white/25 hover:bg-white/10"
                             >
-                              + {tag}
+                              {opt}
                             </button>
                           ))}
                         </div>
-                      </Field>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 pt-5 border-t border-white/10 flex justify-between items-center">
-                    {err && <p className="text-sm text-red-400" role="alert">{err}</p>}
-                    <div className="flex gap-3 ml-auto">
-                      <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={loading}>
-                        Back
-                      </Button>
-                      <Button type="submit" variant="inverted" loading={loading} disabled={!canProceedStep2}>
-                        Next →
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              )}
-
-              {step === 3 && (
-                <form onSubmit={handleStep3Submit} className="flex flex-col">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-white">Get your free scan</h2>
-                    <p className="mt-0.5 text-sm text-white/60">We&apos;ll email a secure link when it&apos;s ready.</p>
-                    <div className="mt-3 flex gap-2">
-                      <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/70">Required</span>
-                      <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white/50">Optional (improves accuracy)</span>
-                    </div>
-
-                    <div className="mt-5 space-y-5">
-                      <Field dark label="Email address *" hint="We'll send your report link here.">
-                        <Input
-                          dark
-                          type="email"
-                          inputMode="email"
-                          autoComplete="email"
-                          placeholder="you@email.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          readOnly={!!isLoggedIn && sessionChecked}
-                          disabled={!!isLoggedIn && sessionChecked}
-                        />
-                      </Field>
-                      {attemptedStep3 && !emailOk && (
-                        <p className="mt-1 text-xs text-red-400">Enter a valid email.</p>
+                      ) : (
+                        <div className="mt-4">
+                          <Input
+                            dark
+                            type="text"
+                            placeholder="e.g. deck repair, fence installation"
+                            maxLength={80}
+                            value={quickQuestionAnswers[currentQuickQuestion.id] ?? ""}
+                            onChange={(e) => setQuickQuestionAnswers((prev) => ({ ...prev, [currentQuickQuestion.id]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              const v = quickQuestionAnswers[currentQuickQuestion.id]?.trim();
+                              if (v) handleQuickQuestionAnswer(v);
+                            }}
+                            className="w-full"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const v = quickQuestionAnswers[currentQuickQuestion.id]?.trim();
+                              if (v) handleQuickQuestionAnswer(v);
+                            }}
+                            disabled={!quickQuestionAnswers[currentQuickQuestion.id]?.trim()}
+                            className="mt-3 w-full rounded-lg border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Continue
+                          </button>
+                        </div>
                       )}
-
-                      <Field dark label="Your name (optional)">
-                        <Input
-                          dark
-                          placeholder="First name"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                        />
-                      </Field>
                     </div>
+                  )}
 
-                    <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-white/50">
-                      <span>Secure link delivery</span>
-                      <span className="text-white/30">·</span>
-                      <span>No subscription</span>
-                      <span className="text-white/30">·</span>
-                      <span>Powered by Stripe</span>
-                    </div>
-
-                    <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                      <h3 className="text-sm font-medium text-white/80">What happens next</h3>
-                      <ul className="mt-2 space-y-1.5 text-sm text-white/60">
-                        <li className="flex items-center gap-2">
-                          <span className="text-emerald-400/80">1.</span> We scan your PDF
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <span className="text-emerald-400/80">2.</span> You get a free summary
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <span className="text-emerald-400/80">3.</span> Unlock the full review if you want it
-                        </li>
-                      </ul>
+                  {/* Primary CTA — 32px below email (or Quick Question) */}
+                  <div className="mt-8 flex flex-col items-center">
+                    {err && <p className="mb-3 text-sm text-red-400 text-center" role="alert">{err}</p>}
+                    <div
+                      className={`w-full max-w-md transition-all duration-300 ease-out ${
+                        canProceedStep2 ? "opacity-100" : "opacity-60"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleStep2Submit()}
+                        disabled={!canProceedStep2 || loading}
+                        className={`w-full min-h-[56px] px-6 py-4 rounded-xl text-base font-semibold text-black bg-white inline-flex items-center justify-center transition-all duration-300 ease-out ${
+                          canProceedStep2
+                            ? "shadow-[0_6px_20px_rgba(0,0,0,0.2)] hover:bg-[#f3f3f3] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.28)] cursor-pointer disabled:hover:translate-y-0 disabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)]"
+                            : "shadow-[0_4px_12px_rgba(0,0,0,0.12)] cursor-not-allowed [&:hover]:translate-y-0 [&:hover]:bg-white"
+                        }`}
+                      >
+                        {loading ? (
+                          <>
+                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                              <path className="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                            </svg>
+                            <span className="ml-2">Preparing your summary…</span>
+                          </>
+                        ) : (
+                          "Generate my free summary"
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="mt-8 pt-5 border-t border-white/10 flex flex-col items-center">
-                    {err && <p className="mb-3 text-sm text-red-400" role="alert">{err}</p>}
-                    <Button type="submit" variant="inverted" loading={loading} disabled={!canProceedStep3} className="w-full sm:w-auto">
-                      Get my free scan →
-                    </Button>
-                    <p className="mt-3 text-center text-xs text-white/50">
-                      Free scan first. Unlock full review if you want the full breakdown.
-                    </p>
+                  {/* Back link — 32px below CTA */}
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setStep(1, "back-button")}
+                      disabled={loading}
+                      className="text-sm text-white/40 hover:text-white/60 transition disabled:opacity-50"
+                    >
+                      Back
+                    </button>
                   </div>
                 </form>
               )}
-            </section>
-            <p className="mt-6 text-center text-xs text-white/50">
-              By continuing, you agree to our{" "}
-              <Link href="/terms" className="text-white/80 underline hover:text-white">Terms</Link>
-              {" "}and{" "}
-              <Link href="/privacy" className="text-white/80 underline hover:text-white">Privacy Policy</Link>.
-            </p>
-          </div>
-          <aside className="lg:col-span-5">
-            <div className="lg:sticky lg:top-8">
-              <PriceCard dark />
-            </div>
-          </aside>
-        </div>
+
+          </section>
+          <p className="mt-8 text-center text-xs text-white/40">
+            By continuing, you agree to our{" "}
+            <Link href="/terms" className="text-white/50 underline hover:text-white/70">Terms</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="text-white/50 underline hover:text-white/70">Privacy Policy</Link>.
+          </p>
       </div>
     </div>
   );

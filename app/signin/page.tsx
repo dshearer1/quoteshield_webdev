@@ -14,16 +14,20 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirmed = searchParams.get("confirmed") === "1";
+  const nextUrl = searchParams.get("next");
 
   useEffect(() => {
     let cancelled = false;
     createBrowserClient()
       .auth.getSession()
       .then(({ data: { session } }) => {
-        if (!cancelled && session) router.replace("/dashboard");
+        if (!cancelled && session) {
+          const target = nextUrl && nextUrl.startsWith("/") ? nextUrl : "/dashboard";
+          router.replace(target);
+        }
       });
     return () => { cancelled = true; };
-  }, [router]);
+  }, [router, nextUrl]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +48,8 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
-      router.push("/dashboard");
+      const target = nextUrl && nextUrl.startsWith("/") ? nextUrl : "/dashboard";
+      router.push(target);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

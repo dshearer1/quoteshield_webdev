@@ -48,7 +48,19 @@ export async function GET(req: Request) {
 
     // Return actual submission status so unpaid (pending_payment) stays on free scan; only "complete" = paid.
     const status = sub.status ?? "draft";
-    const report = hasScoreShape ? reportJson : null;
+    const report = hasScoreShape ? reportJson : (sub.ai_result as Record<string, unknown> | null) ?? reportJson;
+
+    const { data: analysisRow } = await supabaseAdmin
+      .from("submission_analysis")
+      .select("pricing_position, job_units, job_unit_name, effective_unit_price, pricing_confidence, benchmark_snapshot, pricing_engine_result")
+      .eq("submission_id", sub.id)
+      .maybeSingle();
+
+    const { data: lineItems } = await supabaseAdmin
+      .from("submission_line_items")
+      .select("id, description_raw, description_normalized, quantity, line_total, unit, category, sort_order")
+      .eq("submission_id", sub.id)
+      .order("sort_order", { ascending: true });
 
     const payload: {
       submissionId: string;
@@ -57,6 +69,8 @@ export async function GET(req: Request) {
       report: Record<string, unknown> | null;
       quoteType: string | null;
       error_message?: string;
+      analysis?: Record<string, unknown> | null;
+      lineItems?: unknown[] | null;
     } = {
       submissionId: sub.id,
       status,
@@ -64,6 +78,9 @@ export async function GET(req: Request) {
       report,
       quoteType: sub.quote_type ?? null,
     };
+
+    if (analysisRow) payload.analysis = analysisRow as Record<string, unknown>;
+    if (lineItems && lineItems.length > 0) payload.lineItems = lineItems;
 
     if (sub.status === "failed" && sub.ai_error) {
       payload.error_message = sub.ai_error;

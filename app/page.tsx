@@ -8,6 +8,9 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+const primaryCtaClass =
+  "group inline-flex items-center justify-center gap-2 min-h-[56px] px-7 py-4 rounded-xl text-lg font-semibold text-white bg-[#111111] shadow-[0_8px_24px_rgba(0,0,0,0.25)] border-0 transition-all duration-200 ease-out hover:bg-[#1a1a1a] hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.35)]";
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
@@ -29,9 +32,9 @@ export default function HomePage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-6 gap-4">
                 <Link
                   href="/start"
-                  className="inline-flex justify-center py-3.5 px-6 rounded-lg text-sm font-semibold text-black bg-white hover:bg-white/90 transition-colors"
+                  className={primaryCtaClass}
                 >
-                  Run my quote — free scan
+                  Analyze My Quote
                 </Link>
                 <a href="#example-report" className="text-white/80 font-medium hover:text-white text-sm transition-colors">
                   See an example report
@@ -138,9 +141,9 @@ export default function HomePage() {
           <div className="mt-10 text-center">
             <Link
               href="/start"
-              className="inline-flex justify-center py-3.5 px-6 rounded-lg text-sm font-semibold text-black bg-white hover:bg-white/90 transition-colors"
+              className={primaryCtaClass}
             >
-              Run my quote — free scan
+              Analyze My Quote
             </Link>
           </div>
         </div>
@@ -291,9 +294,9 @@ export default function HomePage() {
           </p>
           <Link
             href="/start"
-            className="inline-flex justify-center py-3.5 px-8 rounded-lg text-sm font-semibold text-black bg-white hover:bg-white/90 transition-colors"
+            className={primaryCtaClass}
           >
-            Run my quote — free scan
+            Analyze My Quote
           </Link>
           <p className="mt-5 text-xs text-white/50">
             Most homeowners only pay once per project.
