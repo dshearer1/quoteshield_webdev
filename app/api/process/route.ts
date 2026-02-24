@@ -318,12 +318,13 @@ export async function POST(req: Request) {
       isRevisedFree,
       address: sub.address ?? null,
     });
-    tracer.trace("save_full_analysis", { elapsed: elapsed(Date.now() - t0Save), error: saveErr?.message ?? null });
+    const saveErrMsg = saveErr != null ? (saveErr instanceof Error ? saveErr.message : String(saveErr)) : null;
+    tracer.trace("save_full_analysis", { elapsed: elapsed(Date.now() - t0Save), error: saveErrMsg });
 
     if (saveErr) {
       await sb
         .from("submissions")
-        .update({ status: "error", analysis_status: "error", ai_error: saveErr.message ?? String(saveErr), processed_at: new Date().toISOString() })
+        .update({ status: "error", analysis_status: "error", ai_error: saveErrMsg ?? String(saveErr), processed_at: new Date().toISOString() })
         .eq("id", submissionId);
       throw saveErr;
     }
