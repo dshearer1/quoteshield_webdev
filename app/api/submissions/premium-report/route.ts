@@ -86,7 +86,7 @@ export async function GET(req: Request) {
     data: sub.ai_result,
     reportJson: JSON.stringify(sub.ai_result, null, 2),
     aiConfidence: sub.ai_confidence ?? null,
-    initialChatMessages,
+    initialChatMessages: initialMessages,
     lineItems: lineItems ?? [],
     analysis: analysis ?? null,
   });
