@@ -11,7 +11,16 @@ import {
 } from "@/components/report/DefaultMilestones";
 import { ContractorResponseSection } from "@/components/ContractorResponseSection";
 
-type ReportData = Record<string, unknown>;
+export type NegotiationItem = {
+  ask: string;
+  why?: string;
+};
+
+export type ReportData = Record<string, unknown> & {
+  negotiation?: {
+    items?: NegotiationItem[];
+  };
+};
 
 function ChevronDown({ className, open }: { className?: string; open: boolean }) {
   return (
@@ -692,7 +701,7 @@ function ScopeAuditSection({ data, scopeChecklist, scopeMissingKeys }: { data: R
 
 // --- Negotiation Playbook ---
 function NegotiationSection({ data, negotiationQuestions }: { data: ReportData; negotiationQuestions?: unknown }) {
-  const negotiation = data?.negotiation?.items as Array<{ ask: string; why?: string }> | undefined;
+  const negotiation = data?.negotiation?.items;
   const legacyQuestions = data?.questions_to_ask as string[] | undefined;
   const fromFlags = Array.isArray(negotiationQuestions)
     ? (negotiationQuestions as Array<{ ask: string; why?: string } | string>).map((n) =>
@@ -961,7 +970,7 @@ function ReportSidebar({ data }: { data: ReportData }) {
   const payment = data?.payment as Record<string, unknown> | undefined;
   const timeline = data?.timeline as Record<string, unknown> | undefined;
   const scope = data?.scope as Record<string, unknown> | undefined;
-  const negotiation = (data?.negotiation?.items as Array<{ ask: string }>) ?? (data?.questions_to_ask as string[] ?? []).map((q) => ({ ask: q }));
+  const negotiation = data?.negotiation?.items ?? (data?.questions_to_ask as string[] ?? []).map((q) => ({ ask: q }));
   const depositPercent = payment?.deposit_percent as number | null | undefined;
   const paymentRisk = String(payment?.payment_risk ?? "");
   const timelineClarity = timeline?.timeline_clarity ?? "missing";
