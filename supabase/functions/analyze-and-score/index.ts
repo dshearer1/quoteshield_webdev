@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { computeFreeScore } from "../_shared/scoring.ts";
-import { aiResultToScoreInputs } from "../_shared/aiResultToScoreInputs.ts";
+import { computeFreeScore } from "../_shared/scoring";
+import { aiResultToScoreInputs } from "../_shared/aiResultToScoreInputs";
 
 serve(async (req) => {
   try {

@@ -2,10 +2,10 @@
  * Pricing engine: resolve trade context, estimate job_units and total, fetch benchmark, classify, write output for submission_analysis.
  */
 
-import { fetchUnitBenchmark, UNIT_BASIS_SQUARE } from "./benchmark.ts";
-import { classifyPricing } from "./classify.ts";
-import { estimateRoofingUnits, UNIT_BASIS_SQUARE as ROOFING_UNIT_BASIS } from "../trades/roofing/estimateUnits.ts";
-import type { LineItemRow } from "../trades/roofing/estimateUnits.ts";
+import { fetchUnitBenchmark, UNIT_BASIS_SQUARE } from "./benchmark";
+import { classifyPricing } from "./classify";
+import { estimateRoofingUnits, UNIT_BASIS_SQUARE as ROOFING_UNIT_BASIS } from "../trades/roofing/estimateUnits";
+import type { LineItemRow } from "../trades/roofing/estimateUnits";
 
 export type SubmissionRecord = {
   project_type?: string | null;

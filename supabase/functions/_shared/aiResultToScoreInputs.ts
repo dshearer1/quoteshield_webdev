@@ -1,4 +1,4 @@
-import type { ScoreInputs } from "./scoring.ts";
+import type { ScoreInputs } from "./scoring";
 
 type AiReport = Record<string, unknown> & {
   summary?: { confidence?: string };
