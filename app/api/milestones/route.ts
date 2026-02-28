@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   const projectId = searchParams.get("project_id");
   if (!projectId) return NextResponse.json({ error: "Missing project_id" }, { status: 400 });
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
   const allowed = await ensureProjectAccess(sb, userId, projectId);
   if (!allowed) return NextResponse.json({ error: "Project not found or access denied" }, { status: 403 });
 
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "project_id and title are required" }, { status: 400 });
   }
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
   const allowed = await ensureProjectAccess(sb, userId, projectId);
   if (!allowed) return NextResponse.json({ error: "Project not found or access denied" }, { status: 403 });
 

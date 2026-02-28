@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 import { buildRegionKey } from "@/lib/addressUtils";
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     };
     if (userId) insertPayload.user_id = userId;
 
-    const { data: created, error: insErr } = await supabaseAdmin
+    const { data: created, error: insErr } = await getSupabaseAdmin()
       .from("submissions")
       .insert(insertPayload)
       .select("id, token")

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   buildReportJsonSummary,
   getNegotiationShortReply,
@@ -18,7 +18,7 @@ function getPreviousNegotiationSuggestions(reportJson: Record<string, unknown> |
 }
 
 export async function POST(req: Request) {
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
 
   try {
     const body = await req.json().catch(() => ({}));

@@ -1,6 +1,5 @@
 import "server-only";
-import { createClient } from "@supabase/supabase-js";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { aiResultToScoreInputs } from "@/lib/aiResultToScoreInputs";
 import { computeFreeScore } from "@/lib/scoring";
 import { buildPreviewFindings } from "@/lib/previewFindings";
@@ -13,18 +12,6 @@ import {
 } from "@/lib/ai/deterministicScoring";
 import { normalizeRoofingToSquares } from "@/lib/ai/unitNormalizationRoofing";
 import type { AnalyzeResult, QuoteReportJson, FreeScanUiResult } from "./analyzeQuote";
-
-function getAdminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  if (!serviceRole) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
-
-  return createClient(url, serviceRole, {
-    auth: { persistSession: false },
-  });
-}
 
 function toNum(n: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
@@ -50,7 +37,7 @@ export async function saveSubmissionAnalysis(params: {
 }) {
   const { submissionId, reportJson } = params;
   const version = params.analysisVersion ?? "v1";
-  const supabase = getAdminSupabase();
+  const supabase = getSupabaseAdmin();
 
   await supabase
     .from("submissions")
@@ -286,7 +273,7 @@ export async function saveFullAnalysis(
   const isRevisedFree = opts.isRevisedFree ?? false;
   const finalStatus = isRevisedFree ? "complete" : isUnpaid ? "pending_payment" : "complete";
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from("submissions")
     .update({
       status: finalStatus,
@@ -327,7 +314,7 @@ export async function saveFreeScanAnalysis(
     updates.status = options.updateStatus;
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from("submissions")
     .update(updates)
     .eq("id", submissionId);

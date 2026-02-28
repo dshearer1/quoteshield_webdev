@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing submissionId" }, { status: 400 });
     }
 
-    const { data: sub, error } = await supabaseAdmin
+    const { data: sub, error } = await getSupabaseAdmin()
       .from("submissions")
       .select("id, status, email, project_type, address, customer_name, contractor_name, contractor_email, project_value, project_notes, file_path")
       .eq("id", submissionId)

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { analyzeQuote } from "@/lib/ai/analyzeQuote";
 import { saveFullAnalysis } from "@/lib/ai/saveAnalysis";
 import { aiResultToScoreInputs } from "@/lib/aiResultToScoreInputs";
@@ -54,7 +54,7 @@ function createTracer(startTime: number) {
  * 4) On error: status=error, ai_error=message, processed_at=now(); returns 504 on timeout.
  */
 export async function POST(req: Request) {
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
   let submissionId: string | null = null;
   const startTime = Date.now();
   const tracer = createTracer(startTime);

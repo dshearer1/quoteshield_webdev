@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const token = searchParams.get("token") ?? searchParams.get("token_id");
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
 
   const { data: sub, error: subErr } = await sb
     .from("submissions")

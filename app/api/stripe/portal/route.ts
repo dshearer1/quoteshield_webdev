@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const origin = req.headers.get("origin") ?? process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
   const returnUrl = origin ? `${origin}/dashboard/billing` : `${process.env.APP_URL}/dashboard/billing`;
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
   const { data: profile, error: profileErr } = await sb
     .from("profiles")
     .select("stripe_customer_id")

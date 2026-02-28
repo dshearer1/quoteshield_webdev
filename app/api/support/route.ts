@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 const CATEGORIES = [
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const authHeader = req.headers.get("authorization");
     const userId = getUserIdFromAuthHeader(authHeader);
 
-    const { error } = await supabaseAdmin.from("support_tickets").insert({
+    const { error } = await getSupabaseAdmin().from("support_tickets").insert({
       user_id: userId,
       email,
       category,

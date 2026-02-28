@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -49,7 +49,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const { data: sub, error: fetchErr } = await supabaseAdmin
+    const sb = getSupabaseAdmin();
+    const { data: sub, error: fetchErr } = await sb
       .from("submissions")
       .select("id, status")
       .eq("id", submissionId)
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Submission cannot be updated" }, { status: 400 });
     }
 
-    const { error: updateErr } = await supabaseAdmin
+    const { error: updateErr } = await sb
       .from("submissions")
       .update(updates)
       .eq("id", submissionId);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Provide either claim_token or session_id, not both" }, { status: 400 });
   }
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
 
   // Get auth user email for safety check
   const { data: authUser, error: userErr } = await sb.auth.admin.getUserById(userId);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const sessionId = searchParams.get("session_id");
   if (!sessionId) return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
 
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
   const { data: row, error } = await sb
     .from("submissions")
     .select("id, user_id")

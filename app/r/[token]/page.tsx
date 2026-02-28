@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { ReportView } from "@/components/ReportView";
 import ReportPreviewPaywall from "@/components/ReportPreviewPaywall";
 
@@ -8,7 +8,7 @@ interface PageProps {
 
 export default async function ReportPage({ params }: PageProps) {
   const { token } = await params;
-  const sb = supabaseAdmin;
+  const sb = getSupabaseAdmin();
 
   const { data: sub, error } = await sb
     .from("submissions")

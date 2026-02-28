@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing submissionId or public_id" }, { status: 400 });
     }
 
-    let query = supabaseAdmin
+    const sb = getSupabaseAdmin();
+    let query = sb
       .from("submissions")
       .select("id, status, token, report_json, ai_result, quote_type, ai_error");
 
@@ -50,13 +51,13 @@ export async function GET(req: Request) {
     const status = sub.status ?? "draft";
     const report = hasScoreShape ? reportJson : (sub.ai_result as Record<string, unknown> | null) ?? reportJson;
 
-    const { data: analysisRow } = await supabaseAdmin
+    const { data: analysisRow } = await sb
       .from("submission_analysis")
       .select("pricing_position, job_units, job_unit_name, effective_unit_price, pricing_confidence, benchmark_snapshot, pricing_engine_result")
       .eq("submission_id", sub.id)
       .maybeSingle();
 
-    const { data: lineItems } = await supabaseAdmin
+    const { data: lineItems } = await sb
       .from("submission_line_items")
       .select("id, description_raw, description_normalized, quantity, line_total, unit, category, sort_order")
       .eq("submission_id", sub.id)

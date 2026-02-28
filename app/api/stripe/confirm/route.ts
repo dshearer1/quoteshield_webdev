@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
         ? session.payment_intent
         : (session.payment_intent as { id?: string } | null)?.id ?? null;
 
-    const sb = supabaseAdmin;
+    const sb = getSupabaseAdmin();
     const tokenFromMeta = session.metadata?.token ?? null;
     const { data: sub, error: fetchErr } = await sb
       .from("submissions")

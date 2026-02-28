@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserIdFromAuthHeader } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PDF too large (max 20MB)" }, { status: 400 });
     }
 
-    const sb = supabaseAdmin;
+    const sb = getSupabaseAdmin();
     const token = makeToken();
     const insertPayload: Record<string, unknown> = {
       email,

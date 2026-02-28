@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { runFreeScan } from "@/lib/ai/analyzeQuote";
 
 export const runtime = "nodejs";
@@ -18,7 +18,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing submissionId" }, { status: 400 });
     }
 
-    const { data: sub, error } = await supabaseAdmin
+    const sb = getSupabaseAdmin();
+    const { data: sub, error } = await sb
       .from("submissions")
       .select("id, status, token, free_scan_json")
       .eq("id", submissionId)
@@ -55,7 +56,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing submissionId" }, { status: 400 });
     }
 
-    const { data: sub, error: subErr } = await supabaseAdmin
+    const sb = getSupabaseAdmin();
+    const { data: sub, error: subErr } = await sb
       .from("submissions")
       .select("id, status, file_path, project_type, project_notes, token")
       .eq("id", submissionId)
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
     }
 
     // Return cached free scan if present
-    const { data: fullSub, error: fetchErr } = await supabaseAdmin
+    const { data: fullSub, error: fetchErr } = await sb
       .from("submissions")
       .select("free_scan_json")
       .eq("id", submissionId)
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const { data: fileData, error: dlErr } = await supabaseAdmin.storage
+    const { data: fileData, error: dlErr } = await sb.storage
       .from(STORAGE_BUCKET)
       .download(filePath);
 
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
       sub.project_notes ?? null
     );
 
-    const { error: updateErr } = await supabaseAdmin
+    const { error: updateErr } = await sb
       .from("submissions")
       .update({
         free_scan_json: freeScan,

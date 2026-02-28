@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 const INQUIRY_TYPES = [
   "Contractor inquiry",
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Message must be at least 10 characters" }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin.from("business_inquiries").insert({
+    const { error } = await getSupabaseAdmin().from("business_inquiries").insert({
       name,
       company,
       email,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       : process.env.STRIPE_PRICE_ID;
     if (!priceId) return NextResponse.json({ error: "STRIPE_PRICE_ID not configured" }, { status: 500 });
 
-    const sb = supabaseAdmin;
+    const sb = getSupabaseAdmin();
     const { data: sub, error: subErr } = await sb
       .from("submissions")
       .select("id, email, token")

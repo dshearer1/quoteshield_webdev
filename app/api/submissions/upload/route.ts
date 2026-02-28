@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PDF too large (max 20MB)" }, { status: 400 });
     }
 
-    const { data: sub, error: fetchErr } = await supabaseAdmin
+    const sb = getSupabaseAdmin();
+    const { data: sub, error: fetchErr } = await sb
       .from("submissions")
       .select("id, status")
       .eq("id", submissionId)
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     const filePath = `submissions/${submissionId}/quote.pdf`;
     const bytes = Buffer.from(await file.arrayBuffer());
 
-    const { error: upErr } = await supabaseAdmin.storage
+    const { error: upErr } = await sb.storage
       .from(STORAGE_BUCKET)
       .upload(filePath, bytes, { contentType: "application/pdf", upsert: true });
 
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error: updateErr } = await supabaseAdmin
+    const { error: updateErr } = await sb
       .from("submissions")
       .update({ file_path: filePath })
       .eq("id", submissionId);
