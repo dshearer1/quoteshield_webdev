@@ -606,6 +606,13 @@ const SCOPE_KEY_TO_LABEL: Record<string, string> = {
 };
 
 // --- Scope Audit ---
+/** Shape of each row in the scope audit table; all branches must return this. */
+interface ScopeAuditRow {
+  item: string;
+  status: "included" | "unclear" | "not_listed";
+  why: string;
+}
+
 /** Only mark as "included" when explicitly stated in quote (present from report); otherwise unclear or not listed. */
 function ScopeAuditSection({ data, scopeChecklist, scopeMissingKeys }: { data: ReportData; scopeChecklist?: unknown; scopeMissingKeys?: string[] }) {
   const scope = data?.scope as Record<string, unknown> | undefined;
@@ -628,21 +635,23 @@ function ScopeAuditSection({ data, scopeChecklist, scopeMissingKeys }: { data: R
     missingOrUnclear.map((m) => [m.item.toLowerCase().replace(/\s+/g, " "), m])
   );
 
-  const items = SCOPE_CHECKLIST_ITEMS.map((item) => {
+  const items: ScopeAuditRow[] = SCOPE_CHECKLIST_ITEMS.map((item): ScopeAuditRow => {
     const key = item.toLowerCase();
     const presentMatch = presentLower.some((p) => p.includes(key) || key.includes(p));
     const missingEntry =
       missingByKey.get(key) ??
       [...missingByKey.entries()].find(([k]) => key.includes(k) || k.includes(key))?.[1];
+    const missingWhy = missingEntry && "why" in missingEntry ? missingEntry.why : undefined;
     const tooltip = SCOPE_ITEM_TOOLTIPS[item] ?? "Confirm scope with your contractor.";
-    if (presentMatch) return { item, status: "included" as const, why: missingEntry?.why ?? tooltip };
+    const why = missingWhy ?? tooltip;
+    if (presentMatch) return { item, status: "included", why };
     if (missingEntry)
       return {
         item,
         status: (missingEntry.severity === "warn" ? "unclear" : "not_listed") as "unclear" | "not_listed",
-        why: missingEntry.why ?? tooltip,
+        why,
       };
-    return { item, status: "not_listed" as const, why: tooltip };
+    return { item, status: "not_listed", why: tooltip };
   });
 
   return (
