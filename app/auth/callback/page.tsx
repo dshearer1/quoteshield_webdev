@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabaseBrowser";
 
-/**
- * Handles redirect from Supabase after email confirmation (and similar auth links).
- * Verifies the token, establishes the session, then redirects to dashboard or sign-in.
- */
 export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<LoadingUI />}>
+      <AuthCallbackInner />
+    </Suspense>
+  );
+}
+
+function AuthCallbackInner() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,21 +57,13 @@ export default function AuthCallbackPage() {
         }
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
-  if (status === "loading" || status === "success") {
-    return (
-      <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900" />
-          <p className="mt-4 text-sm text-gray-600">
-            {status === "success" ? "Signing you in…" : "Confirming your email…"}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (status === "loading" || status === "success") return <LoadingUI status={status} />;
 
   return (
     <div className="min-h-[calc(100vh-8rem)] bg-gray-50">
@@ -80,6 +76,19 @@ export default function AuthCallbackPage() {
         >
           Go to sign in
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function LoadingUI({ status }: { status?: "loading" | "success" }) {
+  return (
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900" />
+        <p className="mt-4 text-sm text-gray-600">
+          {status === "success" ? "Signing you in…" : "Confirming your email…"}
+        </p>
       </div>
     </div>
   );
